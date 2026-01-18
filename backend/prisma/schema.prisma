@@ -1,0 +1,377 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CLIENT
+  ADMIN
+  SUPPORT
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  DELIVERING
+  DELIVERED
+  CANCELLED
+}
+
+enum PromotionType {
+  DISCOUNT
+  CASHBACK
+  GIFT
+  COMBO
+}
+
+model User {
+  id            String    @id @default(uuid())
+  phone         String    @unique
+  password      String?
+  firstName     String?
+  lastName      String?
+  email         String?   @unique
+  avatar        String?
+  birthDate     DateTime?
+  role          UserRole  @default(CLIENT)
+  isActive      Boolean   @default(true)
+  fcmToken      String?
+
+  // Loyalty program
+  loyaltyPoints Int       @default(0)
+  qrCode        String    @unique @default(uuid())
+
+  // Metadata
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  lastLoginAt   DateTime?
+
+  // Relations
+  orders        Order[]
+  addresses     Address[]
+  favorites     Favorite[]
+  reviews       Review[]
+  notifications Notification[]
+  chatMessages  ChatMessage[]
+  raffleEntries RaffleEntry[]
+
+  @@map("users")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  nameKy      String?
+  nameRu      String?
+  description String?
+  image       String?
+  icon        String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products    Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id             String    @id @default(uuid())
+  name           String
+  nameKy         String?
+  nameRu         String?
+  description    String?
+  descriptionKy  String?
+  descriptionRu  String?
+  price          Decimal   @db.Decimal(10, 2)
+  discountPrice  Decimal?  @db.Decimal(10, 2)
+  images         String[]
+  ingredients    String?
+  weight         Int?
+  calories       Int?
+  isAvailable    Boolean   @default(true)
+  isNew          Boolean   @default(false)
+  isBestseller   Boolean   @default(false)
+  sortOrder      Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  categoryId     String
+  category       Category  @relation(fields: [categoryId], references: [id])
+
+  orderItems     OrderItem[]
+  favorites      Favorite[]
+  reviews        Review[]
+
+  @@map("products")
+}
+
+model Store {
+  id          String    @id @default(uuid())
+  name        String
+  nameKy      String?
+  nameRu      String?
+  address     String
+  addressKy   String?
+  addressRu   String?
+  latitude    Decimal   @db.Decimal(10, 8)
+  longitude   Decimal   @db.Decimal(11, 8)
+  phone       String
+  workHours   String
+  isActive    Boolean   @default(true)
+  image       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  orders      Order[]
+
+  @@map("stores")
+}
+
+model Address {
+  id          String    @id @default(uuid())
+  name        String
+  street      String
+  apartment   String?
+  entrance    String?
+  floor       String?
+  intercom    String?
+  latitude    Decimal?  @db.Decimal(10, 8)
+  longitude   Decimal?  @db.Decimal(11, 8)
+  isDefault   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  orders      Order[]
+
+  @@map("addresses")
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  orderNumber     String      @unique
+  status          OrderStatus @default(PENDING)
+
+  subtotal        Decimal     @db.Decimal(10, 2)
+  deliveryFee     Decimal     @db.Decimal(10, 2) @default(0)
+  discount        Decimal     @db.Decimal(10, 2) @default(0)
+  pointsUsed      Int         @default(0)
+  pointsDiscount  Decimal     @db.Decimal(10, 2) @default(0)
+  total           Decimal     @db.Decimal(10, 2)
+  pointsEarned    Int         @default(0)
+
+  deliveryType    String
+  deliveryTime    DateTime?
+  comment         String?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  completedAt     DateTime?
+
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+
+  addressId       String?
+  address         Address?    @relation(fields: [addressId], references: [id])
+
+  storeId         String?
+  store           Store?      @relation(fields: [storeId], references: [id])
+
+  items           OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String    @id @default(uuid())
+  quantity    Int
+  price       Decimal   @db.Decimal(10, 2)
+  total       Decimal   @db.Decimal(10, 2)
+
+  orderId     String
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model Promotion {
+  id              String        @id @default(uuid())
+  title           String
+  titleKy         String?
+  titleRu         String?
+  description     String
+  descriptionKy   String?
+  descriptionRu   String?
+  image           String
+  type            PromotionType
+
+  discountPercent Int?
+  cashbackPercent Int?
+
+  minOrderAmount  Decimal?      @db.Decimal(10, 2)
+  productIds      String[]
+
+  startDate       DateTime
+  endDate         DateTime
+  isActive        Boolean       @default(true)
+  sortOrder       Int           @default(0)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@map("promotions")
+}
+
+model Raffle {
+  id                String        @id @default(uuid())
+  title             String
+  titleKy           String?
+  titleRu           String?
+  description       String
+  descriptionKy     String?
+  descriptionRu     String?
+  image             String
+  prize             String
+
+  minPointsRequired Int?
+  minPurchaseAmount Decimal?      @db.Decimal(10, 2)
+
+  startDate         DateTime
+  endDate           DateTime
+  drawDate          DateTime
+  isActive          Boolean       @default(true)
+  winnerId          String?
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  entries           RaffleEntry[]
+
+  @@map("raffles")
+}
+
+model RaffleEntry {
+  id          String    @id @default(uuid())
+
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  raffleId    String
+  raffle      Raffle    @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, raffleId])
+  @@map("raffle_entries")
+}
+
+model NewsArticle {
+  id          String    @id @default(uuid())
+  title       String
+  titleKy     String?
+  titleRu     String?
+  content     String
+  contentKy   String?
+  contentRu   String?
+  image       String
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+  views       Int       @default(0)
+  sortOrder   Int       @default(0)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("news_articles")
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@map("favorites")
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  rating    Int
+  comment   String?
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reviews")
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  message   String
+  isFromUser Boolean @default(true)
+  isRead    Boolean  @default(false)
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("chat_messages")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  titleKy   String?
+  titleRu   String?
+  body      String
+  bodyKy    String?
+  bodyRu    String?
+  type      String
+  data      String?
+  isRead    Boolean  @default(false)
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model Settings {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("settings")
+}
