@@ -6,11 +6,15 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto, DeliveryType } from './dto/create-order.dto';
-import { OrderStatus, Prisma } from '@prisma/client';
+import { OrderStatus, Prisma, CoffeeSize } from '@prisma/client';
+import { LoyaltyService } from '../loyalty/loyalty.service';
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private loyaltyService: LoyaltyService,
+  ) {}
 
   async create(userId: string, dto: CreateOrderDto) {
     // Validate delivery type requirements
@@ -286,6 +290,18 @@ export class OrdersService {
   async updateStatus(orderId: string, status: OrderStatus) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
+      include: {
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                coffeeSize: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!order) {
@@ -294,13 +310,19 @@ export class OrdersService {
 
     const updateData: Prisma.OrderUpdateInput = { status };
 
-    // If completing order, award loyalty points
-    if (status === OrderStatus.DELIVERED && order.pointsEarned > 0) {
-      await this.prisma.user.update({
-        where: { id: order.userId },
-        data: { loyaltyPoints: { increment: order.pointsEarned } },
-      });
+    // If completing order, award loyalty points and update punch cards
+    if (status === OrderStatus.DELIVERED) {
+      // Award loyalty points
+      if (order.pointsEarned > 0) {
+        await this.prisma.user.update({
+          where: { id: order.userId },
+          data: { loyaltyPoints: { increment: order.pointsEarned } },
+        });
+      }
       updateData.completedAt = new Date();
+
+      // Update coffee punch cards
+      await this.processCoffeePunchCards(order.userId, order.items);
     }
 
     const updated = await this.prisma.order.update({
@@ -326,6 +348,26 @@ export class OrdersService {
     });
 
     return this.formatOrder(updated);
+  }
+
+  private async processCoffeePunchCards(
+    userId: string,
+    items: Array<{ quantity: number; product: { coffeeSize: CoffeeSize | null } }>,
+  ) {
+    // Count coffee purchases by size
+    const coffeeCounts = new Map<CoffeeSize, number>();
+
+    for (const item of items) {
+      if (item.product.coffeeSize) {
+        const currentCount = coffeeCounts.get(item.product.coffeeSize) || 0;
+        coffeeCounts.set(item.product.coffeeSize, currentCount + item.quantity);
+      }
+    }
+
+    // Add punches for each size
+    for (const [size, count] of coffeeCounts) {
+      await this.loyaltyService.addPunch(userId, size, count);
+    }
   }
 
   private async generateOrderNumber(): Promise<string> {

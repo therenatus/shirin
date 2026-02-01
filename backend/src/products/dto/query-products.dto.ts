@@ -53,4 +53,16 @@ export class QueryProductsDto {
   @Transform(({ value }) => value === 'true')
   @IsOptional()
   hasDiscount?: boolean;
+
+  @ApiPropertyOptional({ description: 'Minimum price filter' })
+  @Transform(({ value }) => parseFloat(value))
+  @IsNumber()
+  @IsOptional()
+  minPrice?: number;
+
+  @ApiPropertyOptional({ description: 'Maximum price filter' })
+  @Transform(({ value }) => parseFloat(value))
+  @IsNumber()
+  @IsOptional()
+  maxPrice?: number;
 }

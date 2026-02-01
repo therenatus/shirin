@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CoffeeSize } from '@prisma/client';
 
 export interface LoyaltyTransaction {
   id: string;
@@ -9,6 +10,18 @@ export interface LoyaltyTransaction {
   orderId?: string;
   orderNumber?: string;
   createdAt: Date;
+}
+
+export interface PunchCard {
+  id: string;
+  size: CoffeeSize;
+  sizeName: string;
+  currentPunches: number;
+  maxPunches: number;
+  isComplete: boolean;
+  freeItemClaimed: boolean;
+  createdAt: Date;
+  completedAt?: Date;
 }
 
 @Injectable()
@@ -28,10 +41,25 @@ export class LoyaltyService {
       throw new NotFoundException('User not found');
     }
 
+    // Calculate loyalty level based on points
+    const level = this.calculateLoyaltyLevel(user.loyaltyPoints);
+
     return {
       points: user.loyaltyPoints,
       qrCode: user.qrCode,
+      level,
     };
+  }
+
+  private calculateLoyaltyLevel(points: number): string {
+    if (points >= 10000) {
+      return 'Platinum';
+    } else if (points >= 5000) {
+      return 'Gold';
+    } else if (points >= 1000) {
+      return 'Silver';
+    }
+    return 'Bronze';
   }
 
   async getHistory(userId: string): Promise<LoyaltyTransaction[]> {
@@ -148,6 +176,187 @@ export class LoyaltyService {
           descriptionKy: 'Упайлар күйбөйт',
         },
       ],
+    };
+  }
+
+  // ==================== PUNCH CARDS ====================
+
+  private getSizeName(size: CoffeeSize): string {
+    const names = {
+      S: 'Кофе S',
+      M: 'Кофе M',
+      L: 'Кофе L',
+    };
+    return names[size];
+  }
+
+  async getPunchCards(userId: string): Promise<PunchCard[]> {
+    // Get all punch cards for user, create missing ones
+    const existingCards = await this.prisma.coffeePunchCard.findMany({
+      where: { userId },
+    });
+
+    // Ensure all sizes exist
+    const sizes: CoffeeSize[] = ['S', 'M', 'L'];
+    const existingSizes = new Set(existingCards.map((c) => c.size));
+
+    const cardsToCreate = sizes.filter((size) => !existingSizes.has(size));
+
+    if (cardsToCreate.length > 0) {
+      await this.prisma.coffeePunchCard.createMany({
+        data: cardsToCreate.map((size) => ({
+          userId,
+          size,
+          currentPunches: 0,
+          maxPunches: 6,
+        })),
+      });
+    }
+
+    // Fetch all cards again
+    const allCards = await this.prisma.coffeePunchCard.findMany({
+      where: { userId },
+      orderBy: { size: 'asc' },
+    });
+
+    return allCards.map((card) => ({
+      id: card.id,
+      size: card.size,
+      sizeName: this.getSizeName(card.size),
+      currentPunches: card.currentPunches,
+      maxPunches: card.maxPunches,
+      isComplete: card.currentPunches >= card.maxPunches,
+      freeItemClaimed: card.freeItemClaimed,
+      createdAt: card.createdAt,
+      completedAt: card.completedAt || undefined,
+    }));
+  }
+
+  async addPunch(userId: string, size: CoffeeSize, count: number = 1): Promise<PunchCard> {
+    // Get or create punch card for this size
+    let card = await this.prisma.coffeePunchCard.findUnique({
+      where: {
+        userId_size: { userId, size },
+      },
+    });
+
+    if (!card) {
+      card = await this.prisma.coffeePunchCard.create({
+        data: {
+          userId,
+          size,
+          currentPunches: 0,
+          maxPunches: 6,
+        },
+      });
+    }
+
+    // If card is already complete and claimed, reset it
+    if (card.currentPunches >= card.maxPunches && card.freeItemClaimed) {
+      card = await this.prisma.coffeePunchCard.update({
+        where: { id: card.id },
+        data: {
+          currentPunches: 0,
+          freeItemClaimed: false,
+          completedAt: null,
+        },
+      });
+    }
+
+    // Add punches
+    const newPunches = Math.min(card.currentPunches + count, card.maxPunches);
+    const isComplete = newPunches >= card.maxPunches;
+
+    card = await this.prisma.coffeePunchCard.update({
+      where: { id: card.id },
+      data: {
+        currentPunches: newPunches,
+        completedAt: isComplete && !card.completedAt ? new Date() : card.completedAt,
+      },
+    });
+
+    return {
+      id: card.id,
+      size: card.size,
+      sizeName: this.getSizeName(card.size),
+      currentPunches: card.currentPunches,
+      maxPunches: card.maxPunches,
+      isComplete: card.currentPunches >= card.maxPunches,
+      freeItemClaimed: card.freeItemClaimed,
+      createdAt: card.createdAt,
+      completedAt: card.completedAt || undefined,
+    };
+  }
+
+  async claimFreeCoffee(userId: string, size: CoffeeSize): Promise<PunchCard> {
+    const card = await this.prisma.coffeePunchCard.findUnique({
+      where: {
+        userId_size: { userId, size },
+      },
+    });
+
+    if (!card) {
+      throw new NotFoundException('Punch card not found');
+    }
+
+    if (card.currentPunches < card.maxPunches) {
+      throw new BadRequestException('Punch card is not complete');
+    }
+
+    if (card.freeItemClaimed) {
+      throw new BadRequestException('Free coffee already claimed');
+    }
+
+    const updatedCard = await this.prisma.coffeePunchCard.update({
+      where: { id: card.id },
+      data: {
+        freeItemClaimed: true,
+      },
+    });
+
+    return {
+      id: updatedCard.id,
+      size: updatedCard.size,
+      sizeName: this.getSizeName(updatedCard.size),
+      currentPunches: updatedCard.currentPunches,
+      maxPunches: updatedCard.maxPunches,
+      isComplete: updatedCard.currentPunches >= updatedCard.maxPunches,
+      freeItemClaimed: updatedCard.freeItemClaimed,
+      createdAt: updatedCard.createdAt,
+      completedAt: updatedCard.completedAt || undefined,
+    };
+  }
+
+  async resetPunchCard(userId: string, size: CoffeeSize): Promise<PunchCard> {
+    const card = await this.prisma.coffeePunchCard.findUnique({
+      where: {
+        userId_size: { userId, size },
+      },
+    });
+
+    if (!card) {
+      throw new NotFoundException('Punch card not found');
+    }
+
+    const updatedCard = await this.prisma.coffeePunchCard.update({
+      where: { id: card.id },
+      data: {
+        currentPunches: 0,
+        freeItemClaimed: false,
+        completedAt: null,
+      },
+    });
+
+    return {
+      id: updatedCard.id,
+      size: updatedCard.size,
+      sizeName: this.getSizeName(updatedCard.size),
+      currentPunches: updatedCard.currentPunches,
+      maxPunches: updatedCard.maxPunches,
+      isComplete: false,
+      freeItemClaimed: false,
+      createdAt: updatedCard.createdAt,
+      completedAt: undefined,
     };
   }
 }

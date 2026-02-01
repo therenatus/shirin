@@ -18,6 +18,8 @@ export class ProductsService {
       isNew,
       isBestseller,
       hasDiscount,
+      minPrice,
+      maxPrice,
     } = query;
 
     const where: Prisma.ProductWhereInput = {
@@ -49,6 +51,17 @@ export class ProductsService {
       where.discountPrice = { not: null };
     }
 
+    // Price range filters
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      where.price = {};
+      if (minPrice !== undefined) {
+        where.price.gte = minPrice;
+      }
+      if (maxPrice !== undefined) {
+        where.price.lte = maxPrice;
+      }
+    }
+
     let orderBy: Prisma.ProductOrderByWithRelationInput = { sortOrder: 'asc' };
 
     switch (sortBy) {
@@ -66,6 +79,9 @@ export class ProductsService {
         break;
       case ProductSortBy.NEWEST:
         orderBy = { createdAt: 'desc' };
+        break;
+      case ProductSortBy.POPULAR:
+        orderBy = { sortOrder: 'asc' }; // Use sortOrder as popularity indicator (can be updated by admin based on sales)
         break;
     }
 

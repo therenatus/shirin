@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -53,13 +54,14 @@ model User {
   lastLoginAt   DateTime?
 
   // Relations
-  orders        Order[]
-  addresses     Address[]
-  favorites     Favorite[]
-  reviews       Review[]
-  notifications Notification[]
-  chatMessages  ChatMessage[]
-  raffleEntries RaffleEntry[]
+  orders          Order[]
+  addresses       Address[]
+  favorites       Favorite[]
+  reviews         Review[]
+  notifications   Notification[]
+  chatMessages    ChatMessage[]
+  raffleEntries   RaffleEntry[]
+  punchCards      CoffeePunchCard[]
 
   @@map("users")
 }
@@ -83,28 +85,29 @@ model Category {
 }
 
 model Product {
-  id             String    @id @default(uuid())
+  id             String      @id @default(uuid())
   name           String
   nameKy         String?
   nameRu         String?
   description    String?
   descriptionKy  String?
   descriptionRu  String?
-  price          Decimal   @db.Decimal(10, 2)
-  discountPrice  Decimal?  @db.Decimal(10, 2)
+  price          Decimal     @db.Decimal(10, 2)
+  discountPrice  Decimal?    @db.Decimal(10, 2)
   images         String[]
   ingredients    String?
   weight         Int?
   calories       Int?
-  isAvailable    Boolean   @default(true)
-  isNew          Boolean   @default(false)
-  isBestseller   Boolean   @default(false)
-  sortOrder      Int       @default(0)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  isAvailable    Boolean     @default(true)
+  isNew          Boolean     @default(false)
+  isBestseller   Boolean     @default(false)
+  sortOrder      Int         @default(0)
+  coffeeSize     CoffeeSize? // For punch card tracking (S/M/L)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   categoryId     String
-  category       Category  @relation(fields: [categoryId], references: [id])
+  category       Category    @relation(fields: [categoryId], references: [id])
 
   orderItems     OrderItem[]
   favorites      Favorite[]
@@ -374,4 +377,28 @@ model Settings {
   updatedAt   DateTime @updatedAt
 
   @@map("settings")
+}
+
+enum CoffeeSize {
+  S
+  M
+  L
+}
+
+model CoffeePunchCard {
+  id              String      @id @default(uuid())
+  size            CoffeeSize
+  currentPunches  Int         @default(0)
+  maxPunches      Int         @default(6)
+  freeItemClaimed Boolean     @default(false)
+
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  completedAt     DateTime?
+
+  @@unique([userId, size])
+  @@map("coffee_punch_cards")
 }
