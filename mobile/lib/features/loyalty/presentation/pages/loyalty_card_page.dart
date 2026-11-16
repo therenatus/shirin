@@ -3,11 +3,13 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../core/di/injection_container.dart';
 import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 import '../bloc/loyalty_bloc.dart';
+import '../bloc/qr_token_cubit.dart';
 import '../widgets/loyalty_hero_card.dart';
 import '../widgets/punch_card_strip.dart';
-import '../widgets/qr_code_widget.dart';
+import '../widgets/live_loyalty_qr.dart';
 
 /// The loyalty pass: balance and level on the brand card, the QR for the
 /// cashier on a white tile, coffee stamps, and a link to points history.
@@ -104,10 +106,13 @@ class LoyaltyCardPage extends StatelessWidget {
                     children: [
                       Center(
                         child: LayoutBuilder(
-                          builder: (context, c) => LoyaltyQrCodeWidget(
-                            data: info.qrCode!,
-                            // Fits narrow screens: card width minus tile padding.
-                            size: (c.maxWidth - 28).clamp(140.0, 210.0),
+                          builder: (context, c) => BlocProvider(
+                            create: (_) => sl<QrTokenCubit>(),
+                            child: LiveLoyaltyQr(
+                              fallbackCode: info.qrCode,
+                              // Fits narrow screens: card width minus tile padding.
+                              size: (c.maxWidth - 28).clamp(140.0, 210.0),
+                            ),
                           ),
                         ),
                       ),

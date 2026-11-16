@@ -20,6 +20,8 @@ import '../../features/loyalty/domain/repositories/loyalty_repository.dart';
 import '../../features/loyalty/domain/usecases/get_loyalty_history.dart';
 import '../../features/loyalty/domain/usecases/get_loyalty_info.dart';
 import '../../features/loyalty/domain/usecases/get_punch_cards.dart';
+import '../../features/loyalty/domain/usecases/get_qr_token.dart';
+import '../../features/loyalty/presentation/bloc/qr_token_cubit.dart';
 import '../../features/loyalty/presentation/bloc/loyalty_bloc.dart';
 import '../../features/loyalty/presentation/bloc/punch_cards_bloc.dart';
 import '../../features/orders/data/datasources/orders_remote_datasource.dart';
@@ -177,11 +179,15 @@ Future<void> init() async {
   sl.registerLazySingleton(() => GetLoyaltyInfo(sl()));
   sl.registerLazySingleton(() => GetLoyaltyHistory(sl()));
   sl.registerLazySingleton(() => GetPunchCards(sl()));
+  sl.registerLazySingleton(() => GetQrToken(sl()));
 
   // Loyalty - BLoC
   sl.registerFactory(
     () => LoyaltyBloc(getLoyaltyInfo: sl(), getLoyaltyHistory: sl()),
   );
+
+  // Live QR for the cash desk
+  sl.registerFactory(() => QrTokenCubit(getQrToken: sl()));
 
   // Punch Cards - BLoC
   sl.registerFactory(

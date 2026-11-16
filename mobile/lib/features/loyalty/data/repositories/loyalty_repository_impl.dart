@@ -5,6 +5,7 @@ import '../../../auth/data/datasources/auth_local_datasource.dart';
 import '../../domain/entities/loyalty_info.dart';
 import '../../domain/entities/loyalty_transaction.dart';
 import '../../domain/entities/punch_card.dart';
+import '../../domain/entities/qr_token.dart';
 import '../../domain/repositories/loyalty_repository.dart';
 import '../datasources/loyalty_remote_datasource.dart';
 
@@ -48,6 +49,25 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
     try {
       final models = await _remoteDatasource.getLoyaltyHistory();
       return Right(models.map((m) => m.toEntity()).toList());
+    } on NetworkException {
+      return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, QrToken>> getQrToken() async {
+    if (await _isTestMode) {
+      return const Right(QrToken(
+        code: 'SHIRIN-LOYALTY-TEST-USER-ID',
+        validFor: Duration(seconds: 60),
+      ));
+    }
+    try {
+      return Right(await _remoteDatasource.getQrToken());
     } on NetworkException {
       return const Left(NetworkFailure());
     } on UnauthorizedException {

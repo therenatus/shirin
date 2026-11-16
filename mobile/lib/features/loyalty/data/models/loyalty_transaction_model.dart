@@ -1,16 +1,18 @@
 import '../../domain/entities/loyalty_transaction.dart';
 
+/// Row of `GET /loyalty/history`:
+/// `{id, type: earned|used|refunded, points (signed), description, createdAt}`.
 class LoyaltyTransactionModel {
   final String id;
-  final int amount;
-  final String type;
+
+  /// Signed: positive credits, negative debits.
+  final int points;
   final DateTime date;
   final String description;
 
   const LoyaltyTransactionModel({
     required this.id,
-    required this.amount,
-    required this.type,
+    required this.points,
     required this.date,
     required this.description,
   });
@@ -18,18 +20,17 @@ class LoyaltyTransactionModel {
   factory LoyaltyTransactionModel.fromJson(Map<String, dynamic> json) {
     return LoyaltyTransactionModel(
       id: json['id'] as String,
-      amount: (json['amount'] as num).toInt(),
-      type: json['type'] as String,
-      date: DateTime.parse(json['date'] as String),
-      description: json['description'] as String,
+      points: (json['points'] as num).toInt(),
+      date: DateTime.parse(json['createdAt'] as String).toLocal(),
+      description: (json['description'] as String?) ?? '',
     );
   }
 
   LoyaltyTransaction toEntity() {
     return LoyaltyTransaction(
       id: id,
-      amount: amount,
-      type: type == 'earned'
+      amount: points.abs(),
+      type: points >= 0
           ? LoyaltyTransactionType.earned
           : LoyaltyTransactionType.spent,
       date: date,

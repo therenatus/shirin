@@ -39,6 +39,7 @@ class ApiEndpoints {
   static const String loyalty = '/loyalty';
   static const String loyaltyHistory = '/loyalty/history';
   static const String punchCards = '/loyalty/punch-cards';
+  static const String loyaltyQrToken = '/loyalty/qr-token';
 
   // Promotions
   static const String promotions = '/promotions';

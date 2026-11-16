@@ -3,11 +3,13 @@ import '../../../../core/network/api_client.dart';
 import '../models/loyalty_info_model.dart';
 import '../models/loyalty_transaction_model.dart';
 import '../models/punch_card_model.dart';
+import '../../domain/entities/qr_token.dart';
 
 abstract class LoyaltyRemoteDatasource {
   Future<LoyaltyInfoModel> getLoyaltyInfo();
   Future<List<LoyaltyTransactionModel>> getLoyaltyHistory();
   Future<List<PunchCardModel>> getPunchCards();
+  Future<QrToken> getQrToken();
 }
 
 class LoyaltyRemoteDatasourceImpl implements LoyaltyRemoteDatasource {
@@ -38,5 +40,15 @@ class LoyaltyRemoteDatasourceImpl implements LoyaltyRemoteDatasource {
     return data
         .map((e) => PunchCardModel.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  @override
+  Future<QrToken> getQrToken() async {
+    final response = await _apiClient.get(ApiEndpoints.loyaltyQrToken);
+    final data = response.data as Map<String, dynamic>;
+    return QrToken(
+      code: data['code'] as String,
+      validFor: Duration(seconds: (data['expiresIn'] as num).toInt()),
+    );
   }
 }
