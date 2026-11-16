@@ -6,6 +6,7 @@ import { z } from 'zod';
 import Header from '../../components/layout/Header';
 import { Category } from '../../types';
 import api from '../../services/api';
+import ImageUpload from '../../components/ui/ImageUpload';
 import { apiErrorMessage } from '../../utils/errors';
 
 const productSchema = z.object({
@@ -58,6 +59,8 @@ const ProductForm: React.FC = () => {
     },
   });
   const isPreorder = watch('isPreorder');
+  // Photos live outside the form schema: first one is the main photo
+  const [images, setImages] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -83,6 +86,7 @@ const ProductForm: React.FC = () => {
             allowInscription: !!product.allowInscription,
             allowReferencePhoto: !!product.allowReferencePhoto,
           });
+          setImages(Array.isArray(product.images) ? product.images : []);
         }
       } catch {
         alert('Не удалось загрузить данные товара');
@@ -98,6 +102,7 @@ const ProductForm: React.FC = () => {
       const payload = {
         ...data,
         name: data.nameRu,
+        images,
         // Made-to-order settings only apply when the product is made to order
         ...(data.isPreorder
           ? {}
@@ -209,6 +214,18 @@ const ProductForm: React.FC = () => {
                 В наличии
               </label>
             </div>
+          </div>
+
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+            <ImageUpload
+              value={images[0] ?? null}
+              onChange={(url) => setImages((prev) => (url ? [url, ...prev.slice(1)] : prev.slice(1)))}
+              folder="products"
+              label="Главное фото"
+            />
+            {images.length > 1 && (
+              <p className="text-xs text-gray-500 mt-2">Ещё фото у товара: {images.length - 1}</p>
+            )}
           </div>
 
           <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">

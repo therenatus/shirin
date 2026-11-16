@@ -87,9 +87,13 @@ const ProductsList: React.FC = () => {
                   <tr key={product.id} className="border-t border-gray-50 hover:bg-gray-50/50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
-                          <Package size={18} />
-                        </div>
+                        {product.images?.[0] ? (
+                          <img src={product.images[0]} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                        ) : (
+                          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400">
+                            <Package size={18} />
+                          </div>
+                        )}
                         <div>
                           <p className="font-medium text-gray-900">{product.nameRu || product.name}</p>
                           {product.descriptionRu && (

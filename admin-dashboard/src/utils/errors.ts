@@ -26,6 +26,9 @@ const TRANSLATIONS: [RegExp, string][] = [
   [/^Enter a whole number/, 'Введите целое число'],
   [/^Value must be between (\d+)/, 'Значение вне допустимого диапазона'],
   [/^Enter a link/, 'Ссылка должна начинаться с http:// или https://'],
+  [/^End date must be after start date/, 'Дата окончания должна быть позже даты начала'],
+  [/^Employees are managed on the staff page/, 'Сотрудников блокируют на странице «Сотрудники»'],
+  [/^Only JPEG, PNG or WebP/, 'Только JPEG, PNG или WebP'],
 ];
 
 const translate = (message: string) => {

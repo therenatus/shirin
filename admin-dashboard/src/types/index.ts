@@ -46,6 +46,7 @@ export interface Product {
   category?: Category;
   isAvailable: boolean;
   isPreorder?: boolean;
+  images?: string[];
   createdAt: string;
 }
 
@@ -182,13 +183,62 @@ export interface LoyaltyReport {
   meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
+/** `GET /admin/dashboard` */
 export interface DashboardStats {
-  todaySales: number;
-  totalOrders: number;
-  activeCustomers: number;
-  averageOrderValue: number;
-  salesChart: { date: string; amount: number }[];
-  recentOrders: Order[];
+  today: { revenue: number; orders: number; averageCheck: number; newCustomers: number };
+  queue: { pending: number; awaitingPayment: number; refundsPending: number };
+  activeCustomers30d: number;
+  salesChart: { date: string; amount: number; orders: number }[];
+  topProducts: { productId: string; name: string; quantity: number; revenue: number }[];
+  loyalty30d: { earned: number; redeemed: number };
+  recentOrders: {
+    id: string;
+    orderNumber: string;
+    status: string;
+    paymentStatus: PaymentStatus;
+    total: number;
+    deliveryType: 'delivery' | 'pickup';
+    createdAt: string;
+    store: { name: string } | null;
+    customer: string;
+  }[];
+}
+
+/** Row of `GET /admin/customers`. */
+export interface Customer {
+  id: string;
+  phone: string;
+  firstName: string | null;
+  lastName: string | null;
+  loyaltyPoints: number;
+  isActive: boolean;
+  createdAt: string;
+  lastLoginAt: string | null;
+  ordersCount: number;
+  totalSpent: number;
+  lastOrderAt: string | null;
+}
+
+export type PromotionType = 'DISCOUNT' | 'CASHBACK' | 'GIFT' | 'COMBO';
+
+/** Row of `GET /admin/promotions`. */
+export interface AdminPromotion {
+  id: string;
+  title: string;
+  titleRu: string | null;
+  titleKy: string | null;
+  description: string;
+  descriptionRu: string | null;
+  descriptionKy: string | null;
+  image: string;
+  type: PromotionType;
+  discountPercent: number | null;
+  cashbackPercent: number | null;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  isLive: boolean;
+  sortOrder: number;
 }
 
 export interface PaginatedResponse<T> {
