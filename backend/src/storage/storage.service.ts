@@ -5,52 +5,45 @@ import * as Minio from 'minio';
 @Injectable()
 export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
-  private minioClient: Minio.Client;
-  private bucketName = 'shirin';
+  private readonly client: Minio.Client;
+  private readonly bucketName: string;
+  private readonly publicUrl: string;
 
-  constructor(private configService: ConfigService) {
-    this.minioClient = new Minio.Client({
-      endPoint: this.configService.get<string>('minio.endPoint') || 'localhost',
-      port: this.configService.get<number>('minio.port') || 9000,
-      useSSL: this.configService.get<boolean>('minio.useSSL') || false,
-      accessKey: this.configService.get<string>('minio.accessKey') || 'minioadmin',
-      secretKey: this.configService.get<string>('minio.secretKey') || 'minioadmin',
+  constructor(configService: ConfigService) {
+    // `minio` is used as a generic S3 client; the server is SeaweedFS (or any S3)
+    this.client = new Minio.Client({
+      endPoint: configService.getOrThrow<string>('storage.endPoint'),
+      port: configService.getOrThrow<number>('storage.port'),
+      useSSL: configService.get<boolean>('storage.useSSL') ?? false,
+      accessKey: configService.getOrThrow<string>('storage.accessKey'),
+      secretKey: configService.getOrThrow<string>('storage.secretKey'),
+      pathStyle: true,
     });
+    this.bucketName = configService.getOrThrow<string>('storage.bucket');
+    this.publicUrl = configService.getOrThrow<string>('storage.publicUrl');
   }
 
   async onModuleInit() {
     await this.ensureBucketExists();
   }
 
+  /**
+   * Public read access for the bucket is configured on the storage side
+   * (anonymous identity in infra/seaweedfs/entrypoint.sh), not via bucket policy.
+   */
   private async ensureBucketExists() {
     try {
-      const exists = await this.minioClient.bucketExists(this.bucketName);
+      const exists = await this.client.bucketExists(this.bucketName);
       if (!exists) {
-        await this.minioClient.makeBucket(this.bucketName);
+        await this.client.makeBucket(this.bucketName);
         this.logger.log(`Bucket "${this.bucketName}" created`);
-
-        // Set public read policy
-        const policy = {
-          Version: '2012-10-17',
-          Statement: [
-            {
-              Effect: 'Allow',
-              Principal: { AWS: ['*'] },
-              Action: ['s3:GetObject'],
-              Resource: [`arn:aws:s3:::${this.bucketName}/*`],
-            },
-          ],
-        };
-        await this.minioClient.setBucketPolicy(
-          this.bucketName,
-          JSON.stringify(policy),
-        );
-        this.logger.log(`Public read policy set for bucket "${this.bucketName}"`);
       } else {
         this.logger.log(`Bucket "${this.bucketName}" already exists`);
       }
     } catch (error) {
-      this.logger.error('Failed to initialize bucket:', error.message);
+      this.logger.error(
+        `Failed to initialize bucket: ${(error as Error).message}`,
+      );
     }
   }
 
@@ -60,7 +53,7 @@ export class StorageService implements OnModuleInit {
   ): Promise<string> {
     const fileName = `${folder}/${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`;
 
-    await this.minioClient.putObject(
+    await this.client.putObject(
       this.bucketName,
       fileName,
       file.buffer,
@@ -68,27 +61,25 @@ export class StorageService implements OnModuleInit {
       { 'Content-Type': file.mimetype },
     );
 
-    const endpoint = this.configService.get<string>('minio.endPoint');
-    const port = this.configService.get<number>('minio.port');
-    const useSSL = this.configService.get<boolean>('minio.useSSL');
-    const protocol = useSSL ? 'https' : 'http';
-
-    return `${protocol}://${endpoint}:${port}/${this.bucketName}/${fileName}`;
+    return `${this.publicUrl}/${this.bucketName}/${fileName}`;
   }
 
   async deleteFile(fileUrl: string): Promise<boolean> {
     try {
       const url = new URL(fileUrl);
       const objectName = url.pathname.replace(`/${this.bucketName}/`, '');
-      await this.minioClient.removeObject(this.bucketName, objectName);
+      await this.client.removeObject(this.bucketName, objectName);
       return true;
     } catch (error) {
-      this.logger.error('Failed to delete file:', error.message);
+      this.logger.error(`Failed to delete file: ${(error as Error).message}`);
       return false;
     }
   }
 
-  async getSignedUrl(objectName: string, expiry: number = 3600): Promise<string> {
-    return this.minioClient.presignedGetObject(this.bucketName, objectName, expiry);
+  async getSignedUrl(
+    objectName: string,
+    expiry: number = 3600,
+  ): Promise<string> {
+    return this.client.presignedGetObject(this.bucketName, objectName, expiry);
   }
 }

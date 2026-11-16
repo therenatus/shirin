@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'liquid_glass/liquid_glass_kit.dart';
 import '../../core/constants/app_colors.dart';
 
 enum AppButtonVariant { primary, outlined, text }
@@ -22,72 +23,21 @@ class AppButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     switch (variant) {
+      // Primary = brand-tinted glass, outlined = neutral glass.
       case AppButtonVariant.primary:
-        return _buildPrimary(context);
       case AppButtonVariant.outlined:
-        return _buildOutlined(context);
+        return GlassButton(
+          label: label,
+          icon: icon,
+          onTap: onPressed,
+          loading: isLoading,
+          prominent: variant == AppButtonVariant.primary,
+          expanded: true,
+          height: 56,
+        );
       case AppButtonVariant.text:
         return _buildText(context);
     }
-  }
-
-  Widget _buildPrimary(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: onPressed != null && !isLoading
-            ? const LinearGradient(
-                colors: [AppColors.primary, AppColors.primaryDark],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              )
-            : null,
-        color: onPressed == null || isLoading
-            ? AppColors.primary.withValues(alpha: 0.5)
-            : null,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: onPressed != null && !isLoading
-            ? [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ]
-            : null,
-      ),
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          disabledBackgroundColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-        child: _buildChild(Colors.white),
-      ),
-    );
-  }
-
-  Widget _buildOutlined(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.glassFill,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.primary, width: 1.5),
-      ),
-      child: OutlinedButton(
-        onPressed: isLoading ? null : onPressed,
-        style: OutlinedButton.styleFrom(
-          side: BorderSide.none,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-        child: _buildChild(AppColors.primary),
-      ),
-    );
   }
 
   Widget _buildText(BuildContext context) {

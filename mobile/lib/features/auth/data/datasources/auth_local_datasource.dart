@@ -7,6 +7,7 @@ abstract class AuthLocalDatasource {
   Future<void> cacheUser(UserModel user);
   Future<UserModel?> getCachedUser();
   Future<String?> getAccessToken();
+  Future<String?> getRefreshToken();
   Future<bool> hasToken();
   Future<void> clearCache();
 }
@@ -37,6 +38,11 @@ class AuthLocalDatasourceImpl implements AuthLocalDatasource {
   @override
   Future<String?> getAccessToken() async {
     return await _storageService.getAccessToken();
+  }
+
+  @override
+  Future<String?> getRefreshToken() async {
+    return await _storageService.getRefreshToken();
   }
 
   @override

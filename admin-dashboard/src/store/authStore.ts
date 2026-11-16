@@ -1,47 +1,79 @@
 import { create } from 'zustand';
-import api from '../services/api';
+import api, { tokenStorage } from '../services/api';
+
+export type StaffRole = 'ADMIN' | 'SUPPORT';
+const STAFF_ROLES: string[] = ['ADMIN', 'SUPPORT'];
+
+export class AccessDeniedError extends Error {
+  constructor() {
+    super('Нет доступа к панели управления');
+  }
+}
 
 interface AuthState {
   token: string | null;
+  role: StaffRole | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  sendCode: (phone: string) => Promise<void>;
   login: (phone: string, code: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => void;
 }
 
+const storedRole = () => localStorage.getItem('admin_role') as StaffRole | null;
+
 export const useAuthStore = create<AuthState>((set) => ({
-  token: localStorage.getItem('admin_token'),
-  isAuthenticated: !!localStorage.getItem('admin_token'),
+  token: tokenStorage.getAccess(),
+  role: storedRole(),
+  isAuthenticated: !!tokenStorage.getAccess(),
   isLoading: false,
+
+  sendCode: async (phone: string) => {
+    set({ isLoading: true });
+    try {
+      await api.post('/auth/send-code', { phone });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
 
   login: async (phone: string, code: string) => {
     set({ isLoading: true });
     try {
-      // For test mode: phone 999999999, code 9999
-      if (phone === '+996999999999' && code === '9999') {
-        const testToken = 'admin-test-token';
-        localStorage.setItem('admin_token', testToken);
-        set({ token: testToken, isAuthenticated: true, isLoading: false });
-        return;
-      }
       const response = await api.post('/auth/verify-code', { phone, code });
-      const { accessToken } = response.data;
-      localStorage.setItem('admin_token', accessToken);
-      set({ token: accessToken, isAuthenticated: true, isLoading: false });
-    } catch (error) {
+      const { accessToken, refreshToken, user } = response.data;
+
+      if (!STAFF_ROLES.includes(user?.role)) {
+        // Revoke the session we just got: this user is not staff
+        await api
+          .post('/auth/logout', { refreshToken }, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          })
+          .catch(() => undefined);
+        throw new AccessDeniedError();
+      }
+
+      tokenStorage.set(accessToken, refreshToken);
+      localStorage.setItem('admin_role', user.role);
+      set({ token: accessToken, role: user.role, isAuthenticated: true });
+    } finally {
       set({ isLoading: false });
-      throw error;
     }
   },
 
   logout: () => {
-    localStorage.removeItem('admin_token');
-    set({ token: null, isAuthenticated: false });
+    const refreshToken = tokenStorage.getRefresh();
+    if (refreshToken) {
+      api.post('/auth/logout', { refreshToken }).catch(() => undefined);
+    }
+    tokenStorage.clear();
+    localStorage.removeItem('admin_role');
+    set({ token: null, role: null, isAuthenticated: false });
   },
 
   checkAuth: () => {
-    const token = localStorage.getItem('admin_token');
-    set({ isAuthenticated: !!token, token });
+    const token = tokenStorage.getAccess();
+    set({ isAuthenticated: !!token, token, role: storedRole() });
   },
 }));

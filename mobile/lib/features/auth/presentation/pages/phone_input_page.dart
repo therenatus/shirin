@@ -1,14 +1,20 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/constants/app_text_styles.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 
+/// Login: big friendly title, a glass phone capsule with the +996 prefix chip
+/// inside, one prominent glass action and small legal text at the bottom.
 class PhoneInputPage extends StatefulWidget {
   const PhoneInputPage({super.key});
 
@@ -20,9 +26,9 @@ class _PhoneInputPageState extends State<PhoneInputPage>
     with SingleTickerProviderStateMixin {
   final _phoneController = TextEditingController();
   final _focusNode = FocusNode();
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+  late final AnimationController _animationController;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<Offset> _slideAnimation;
   bool _isValid = false;
   bool _isFocused = false;
 
@@ -30,26 +36,21 @@ class _PhoneInputPageState extends State<PhoneInputPage>
   void initState() {
     super.initState();
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 700),
       vsync: this,
     );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
-      ),
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
     );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.2),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
-      ),
-    );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: const Interval(0.1, 1.0, curve: Curves.easeOutCubic),
+          ),
+        );
     _animationController.forward();
-
     _focusNode.addListener(() {
       setState(() => _isFocused = _focusNode.hasFocus);
     });
@@ -64,9 +65,7 @@ class _PhoneInputPageState extends State<PhoneInputPage>
   }
 
   void _onPhoneChanged(String value) {
-    setState(() {
-      _isValid = value.length == AppConstants.phoneLength;
-    });
+    setState(() => _isValid = value.length == AppConstants.phoneLength);
   }
 
   void _onSendCode() {
@@ -76,404 +75,413 @@ class _PhoneInputPageState extends State<PhoneInputPage>
     context.read<AuthBloc>().add(SendCodeRequested(phone));
   }
 
-  String _formatPhoneDisplay(String value) {
-    if (value.isEmpty) return '';
-    final cleaned = value.replaceAll(RegExp(r'\D'), '');
-    final buffer = StringBuffer();
-    for (int i = 0; i < cleaned.length; i++) {
-      if (i == 3 || i == 5 || i == 7) buffer.write(' ');
-      buffer.write(cleaned[i]);
-    }
-    return buffer.toString();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state is CodeSent) {
           context.push('/otp', extra: state.phone);
         } else if (state is AuthError) {
-          _showErrorSnackBar(state.message);
+          showGlassToast(
+            context,
+            state.message,
+            icon: Icons.error_outline_rounded,
+          );
         }
       },
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        body: Stack(
-          children: [
-            // Background decorations
-            Positioned(
-              top: -80,
-              right: -80,
-              child: Container(
-                width: 250,
-                height: 250,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      AppColors.purple.withValues(alpha: 0.12),
-                      AppColors.purple.withValues(alpha: 0.0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 200,
-              left: -60,
-              child: Container(
-                width: 180,
-                height: 180,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.08),
-                      AppColors.primary.withValues(alpha: 0.0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Main content
-            SafeArea(
+      // Background sits outside the Scaffold so it stays full-screen while
+      // the Scaffold body resizes for the keyboard.
+      child: LiquidBackground(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          resizeToAvoidBottomInset: true,
+          body: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTap: () => FocusScope.of(context).unfocus(),
+            child: SafeArea(
               child: FadeTransition(
                 opacity: _fadeAnimation,
                 child: SlideTransition(
                   position: _slideAnimation,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 40),
-
-                        // Logo
-                        Center(
-                          child: Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  AppColors.purple,
-                                  AppColors.purpleDark,
-                                ],
-                              ),
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.purple.withValues(alpha: 0.3),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 8),
+                  // No scrolling: when the keyboard opens the hero scales
+                  // down so the sign-in panel always stays above it.
+                  child: Column(
+                    children: [
+                      // Brand hero, centred in the space above the form.
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: SizedBox(
+                                width: MediaQuery.sizeOf(context).width - 56,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const SizedBox(height: 12),
+                                    const _HeroMark(),
+                                    const SizedBox(height: 20),
+                                    Text(
+                                      'КОНДИТЕРСКАЯ ШИРИН',
+                                      textAlign: TextAlign.center,
+                                      style: AppTextStyles.overline.copyWith(
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Добро пожаловать',
+                                      textAlign: TextAlign.center,
+                                      style: AppTextStyles.display,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      'Заказывайте любимые десерты и копите '
+                                      'бонусы за каждую покупку',
+                                      textAlign: TextAlign.center,
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: Icon(
-                              Icons.cake_rounded,
-                              size: 40,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 40),
-
-                        // Title
-                        Text(
-                          'Добро пожаловать!',
-                          style: GoogleFonts.nunito(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
-                            height: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Введите номер телефона для входа\nв приложение',
-                          style: GoogleFonts.nunito(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                            color: AppColors.textLight,
-                            height: 1.4,
-                          ),
-                        ),
-
-                        const SizedBox(height: 40),
-
-                        // Phone input
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: _isFocused
-                                  ? AppColors.purple
-                                  : Colors.transparent,
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: _isFocused
-                                    ? AppColors.purple.withValues(alpha: 0.15)
-                                    : Colors.black.withValues(alpha: 0.05),
-                                blurRadius: _isFocused ? 20 : 10,
-                                offset: const Offset(0, 4),
                               ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      // Sign-in panel docked at the bottom (iOS sheet style).
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                        child: LiquidGlass(
+                          style: GlassStyle.thick,
+                          borderRadius: BorderRadius.circular(34),
+                          padding: const EdgeInsets.fromLTRB(18, 20, 18, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _PhoneField(
+                                controller: _phoneController,
+                                focusNode: _focusNode,
+                                isFocused: _isFocused,
+                                isValid: _isValid,
+                                onChanged: _onPhoneChanged,
+                                onSubmitted: (_) => _onSendCode(),
+                              ),
+                              const SizedBox(height: 14),
+                              BlocBuilder<AuthBloc, AuthState>(
+                                builder: (context, state) {
+                                  final isLoading = state is AuthLoading;
+                                  return GlassButton(
+                                    label: 'Получить код',
+                                    prominent: true,
+                                    expanded: true,
+                                    loading: isLoading,
+                                    onTap: _isValid && !isLoading
+                                        ? _onSendCode
+                                        : null,
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 14),
+                              const _TermsNote(),
                             ],
                           ),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 4,
-                            ),
-                            child: Row(
-                              children: [
-                                // Country flag/code
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.background,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        '🇰🇬',
-                                        style: const TextStyle(fontSize: 20),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        AppConstants.phonePrefix,
-                                        style: GoogleFonts.nunito(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppColors.textPrimary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-
-                                // Phone input field
-                                Expanded(
-                                  child: TextField(
-                                    controller: _phoneController,
-                                    focusNode: _focusNode,
-                                    keyboardType: TextInputType.phone,
-                                    maxLength: AppConstants.phoneLength,
-                                    onChanged: _onPhoneChanged,
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly,
-                                    ],
-                                    style: GoogleFonts.nunito(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.textPrimary,
-                                      letterSpacing: 1,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText: '--- -- -- --',
-                                      hintStyle: GoogleFonts.nunito(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.textLight,
-                                        letterSpacing: 1,
-                                      ),
-                                      counterText: '',
-                                      border: InputBorder.none,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(vertical: 16),
-                                    ),
-                                  ),
-                                ),
-
-                                // Valid indicator
-                                AnimatedOpacity(
-                                  duration: const Duration(milliseconds: 200),
-                                  opacity: _isValid ? 1.0 : 0.0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(6),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.success,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.check_rounded,
-                                      color: Colors.white,
-                                      size: 16,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-                        const SizedBox(height: 24),
+/// Shirin logo in a glass halo with a soft brand glow, surrounded by small
+/// glass bubbles that drift slowly.
+class _HeroMark extends StatefulWidget {
+  const _HeroMark();
 
-                        // Send code button
-                        BlocBuilder<AuthBloc, AuthState>(
-                          builder: (context, state) {
-                            final isLoading = state is AuthLoading;
-                            return GestureDetector(
-                              onTap: _isValid && !isLoading ? _onSendCode : null,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                width: double.infinity,
-                                height: 60,
-                                decoration: BoxDecoration(
-                                  gradient: _isValid
-                                      ? LinearGradient(
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                          colors: [
-                                            AppColors.purple,
-                                            AppColors.purpleDark,
-                                          ],
-                                        )
-                                      : null,
-                                  color: _isValid ? null : AppColors.divider,
-                                  borderRadius: BorderRadius.circular(18),
-                                  boxShadow: _isValid
-                                      ? [
-                                          BoxShadow(
-                                            color: AppColors.purple
-                                                .withValues(alpha: 0.4),
-                                            blurRadius: 20,
-                                            offset: const Offset(0, 8),
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                                child: Center(
-                                  child: isLoading
-                                      ? SizedBox(
-                                          width: 24,
-                                          height: 24,
-                                          child: CircularProgressIndicator(
-                                            color: Colors.white,
-                                            strokeWidth: 2.5,
-                                          ),
-                                        )
-                                      : Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              'Получить код',
-                                              style: GoogleFonts.nunito(
-                                                fontSize: 17,
-                                                fontWeight: FontWeight.w700,
-                                                color: _isValid
-                                                    ? Colors.white
-                                                    : AppColors.textLight,
-                                              ),
-                                            ),
-                                            if (_isValid) ...[
-                                              const SizedBox(width: 8),
-                                              Icon(
-                                                Icons.arrow_forward_rounded,
-                                                color: Colors.white,
-                                                size: 20,
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+  @override
+  State<_HeroMark> createState() => _HeroMarkState();
+}
 
-                        const Spacer(),
+class _HeroMarkState extends State<_HeroMark>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _float = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 6),
+  )..repeat();
 
-                        // Terms
-                        Padding(
-                          padding:
-                              EdgeInsets.only(bottom: bottomPadding + 20),
-                          child: Center(
-                            child: RichText(
-                              textAlign: TextAlign.center,
-                              text: TextSpan(
-                                style: GoogleFonts.nunito(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.textLight,
-                                  height: 1.5,
-                                ),
-                                children: [
-                                  const TextSpan(
-                                    text: 'Нажимая "Получить код", вы соглашаетесь\nс ',
-                                  ),
-                                  TextSpan(
-                                    text: 'условиями использования',
-                                    style: TextStyle(
-                                      color: AppColors.purple,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+  // (offset from centre, diameter, phase)
+  static const _bubbles = [
+    (Offset(-96, -54), 30.0, 0.0),
+    (Offset(102, -30), 44.0, 0.35),
+    (Offset(-108, 48), 20.0, 0.6),
+    (Offset(88, 64), 24.0, 0.8),
+    (Offset(-40, -92), 14.0, 0.2),
+  ];
+
+  @override
+  void dispose() {
+    _float.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 280,
+      height: 220,
+      child: AnimatedBuilder(
+        animation: _float,
+        builder: (context, _) {
+          final t = _float.value * 2 * math.pi;
+          return Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              // Brand glow.
+              Container(
+                width: 240,
+                height: 240,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      AppColors.primaryLight.withValues(alpha: 0.32),
+                      AppColors.primaryLight.withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+              for (final (offset, size, phase) in _bubbles)
+                Transform.translate(
+                  offset:
+                      offset +
+                      Offset(
+                        math.sin(t + phase * 2 * math.pi) * 4,
+                        math.cos(t + phase * 2 * math.pi) * 7,
+                      ),
+                  child: LiquidGlass(
+                    style: GlassStyle.clear.copyWith(shadowOpacity: 0.10),
+                    width: size,
+                    height: size,
+                    borderRadius: BorderRadius.circular(size / 2),
+                  ),
+                ),
+              Transform.translate(
+                offset: Offset(0, math.sin(t) * 3),
+                child: LiquidGlass(
+                  style: GlassStyle.clear.copyWith(shadowOpacity: 0.22),
+                  width: 132,
+                  height: 132,
+                  borderRadius: const BorderRadius.all(Radius.circular(42)),
+                  padding: const EdgeInsets.all(12),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      // Concentric: 42 − 12.
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.high,
+                      errorBuilder: (_, _, _) => const Icon(
+                        Icons.cake_rounded,
+                        size: 48,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Glass capsule: [🇰🇬 +996] chip, digits field, success check.
+/// The [TextField] here is the first one on the page (integration test).
+class _PhoneField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool isFocused;
+  final bool isValid;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
+
+  const _PhoneField({
+    required this.controller,
+    required this.focusNode,
+    required this.isFocused,
+    required this.isValid,
+    required this.onChanged,
+    required this.onSubmitted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final digitStyle = AppTextStyles.heading3.copyWith(
+      fontSize: 20,
+      letterSpacing: 1.2,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 6, bottom: 8),
+          child: Text('Номер телефона', style: AppTextStyles.label),
+        ),
+        AnimatedContainer(
+          duration: AppConstants.animationFast,
+          foregroundDecoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: isFocused
+                  ? AppColors.primary.withValues(alpha: 0.55)
+                  : Colors.white.withValues(alpha: 0),
+              width: 1.5,
+            ),
+          ),
+          // Solid field inside the glass panel: no glass on glass.
+          child: Container(
+            height: 64,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.secondary.withValues(
+                    alpha: isFocused ? 0.10 : 0.05,
+                  ),
+                  blurRadius: 16,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: focusNode.requestFocus,
+              child: Row(
+                children: [
+                  // Country prefix chip (solid, no glass-on-glass).
+                  Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryTint,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('🇰🇬', style: TextStyle(fontSize: 18)),
+                        const SizedBox(width: 6),
+                        Text(
+                          AppConstants.phonePrefix,
+                          style: digitStyle.copyWith(
+                            fontSize: 16,
+                            letterSpacing: 0.4,
                           ),
                         ),
                       ],
                     ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      keyboardType: TextInputType.phone,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.telephoneNumberLocal],
+                      maxLength: AppConstants.phoneLength,
+                      onChanged: onChanged,
+                      onSubmitted: onSubmitted,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      style: digitStyle,
+                      cursorColor: AppColors.primary,
+                      decoration: InputDecoration(
+                        hintText: '--- -- -- --',
+                        hintStyle: digitStyle.copyWith(
+                          color: AppColors.textLight,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        counterText: '',
+                        filled: false,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  AnimatedScale(
+                    duration: const Duration(milliseconds: 300),
+                    scale: isValid ? 1 : 0,
+                    curve: Curves.easeOutBack,
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: const BoxDecoration(
+                        color: AppColors.success,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
+}
 
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
+class _TermsNote extends StatelessWidget {
+  const _TermsNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text.rich(
+        TextSpan(
+          style: AppTextStyles.caption.copyWith(color: AppColors.textLight),
           children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.error_outline_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: GoogleFonts.nunito(
-                  fontWeight: FontWeight.w600,
-                ),
+            const TextSpan(text: 'Нажимая «Получить код», вы соглашаетесь\nс '),
+            TextSpan(
+              text: 'условиями использования',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
         ),
-        backgroundColor: AppColors.error,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        margin: const EdgeInsets.all(16),
+        textAlign: TextAlign.center,
       ),
     );
   }

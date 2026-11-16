@@ -29,6 +29,8 @@ class AddressesRepositoryImpl implements AddressesRepository {
       return Right(models.map((m) => m.toEntity()).toList());
     } on NetworkException {
       return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
@@ -49,6 +51,8 @@ class AddressesRepositoryImpl implements AddressesRepository {
       return Right(model.toEntity());
     } on NetworkException {
       return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
@@ -76,6 +80,8 @@ class AddressesRepositoryImpl implements AddressesRepository {
       return Right(model.toEntity());
     } on NetworkException {
       return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
@@ -109,6 +115,8 @@ class AddressesRepositoryImpl implements AddressesRepository {
       return Right(model.toEntity());
     } on NetworkException {
       return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
@@ -124,6 +132,8 @@ class AddressesRepositoryImpl implements AddressesRepository {
       return const Right(null);
     } on NetworkException {
       return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
@@ -155,6 +165,8 @@ class AddressesRepositoryImpl implements AddressesRepository {
       return Right(model.toEntity());
     } on NetworkException {
       return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_text_styles.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 
 class Story {
   final String id;
@@ -36,6 +37,8 @@ class StorySlide {
   });
 }
 
+/// Row of story bubbles: unseen stories get the brand ring, seen ones a
+/// quiet hairline. Tapping springs the bubble (glass press feel).
 class StoriesWidget extends StatelessWidget {
   final List<Story> stories;
   final Function(int storyIndex) onStoryTap;
@@ -49,21 +52,18 @@ class StoriesWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 110,
-      child: ListView.builder(
+      height: 104,
+      child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        physics: const BouncingScrollPhysics(),
+        clipBehavior: Clip.none,
         itemCount: stories.length,
-        itemBuilder: (context, index) {
-          final story = stories[index];
-          return Padding(
-            padding: const EdgeInsets.only(right: 14),
-            child: _StoryItem(
-              story: story,
-              onTap: () => onStoryTap(index),
-            ),
-          );
-        },
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (context, index) => _StoryItem(
+          story: stories[index],
+          onTap: () => onStoryTap(index),
+        ),
       ),
     );
   }
@@ -80,82 +80,86 @@ class _StoryItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return GlassPressable(
       onTap: onTap,
-      child: Column(
-        children: [
-          // Avatar with gradient border
-          Container(
-            width: 76,
-            height: 76,
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: story.isViewed
-                  ? null
-                  : const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color(0xFFFF6B9D),
-                        Color(0xFFFF8E53),
-                        Color(0xFFFFC86B),
-                      ],
-                    ),
-              border: story.isViewed
-                  ? Border.all(color: AppColors.textLight.withValues(alpha: 0.5), width: 2)
-                  : null,
-              boxShadow: story.isViewed
-                  ? null
-                  : [
-                      BoxShadow(
-                        color: const Color(0xFFFF6B9D).withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-            ),
-            child: Container(
+      borderRadius: BorderRadius.circular(36),
+      glowColor: Colors.transparent,
+      child: SizedBox(
+        width: 76,
+        child: Column(
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              padding: const EdgeInsets.all(2.5),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
-                color: Colors.white,
+                gradient: story.isViewed
+                    ? null
+                    : const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppColors.primaryLight,
+                          AppColors.primary,
+                          AppColors.secondary,
+                        ],
+                      ),
+                border: story.isViewed
+                    ? Border.all(
+                        color: AppColors.textLight.withValues(alpha: 0.4),
+                        width: 1.5,
+                      )
+                    : null,
+                boxShadow: story.isViewed
+                    ? null
+                    : [
+                        BoxShadow(
+                          color: AppColors.primary.withValues(alpha: 0.22),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
               ),
-              child: ClipOval(
-                child: Image.network(
-                  story.previewImage,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: AppColors.primarySoft,
-                    child: Center(
-                      child: Icon(
-                        Icons.photo_rounded,
-                        color: AppColors.primary.withValues(alpha: 0.5),
-                        size: 28,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.surface, width: 2.5),
+                  color: AppColors.surface,
+                ),
+                child: ClipOval(
+                  child: Image.network(
+                    story.previewImage,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => Container(
+                      color: AppColors.primarySoft,
+                      child: Center(
+                        child: Icon(
+                          Icons.photo_rounded,
+                          color: AppColors.primary.withValues(alpha: 0.5),
+                          size: 28,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          // Title
-          SizedBox(
-            width: 76,
-            child: Text(
+            const SizedBox(height: 8),
+            Text(
               story.title,
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.nunito(
-                fontSize: 12,
+              style: AppTextStyles.caption.copyWith(
                 fontWeight: story.isViewed ? FontWeight.w600 : FontWeight.w700,
-                color: story.isViewed ? AppColors.textSecondary : AppColors.textPrimary,
+                color: story.isViewed
+                    ? AppColors.textSecondary
+                    : AppColors.textPrimary,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

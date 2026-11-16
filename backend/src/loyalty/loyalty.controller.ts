@@ -1,9 +1,16 @@
-import { Controller, Get, Post, Param, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import { Controller, Get, Post, Param, Body, UseGuards } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiParam,
+} from '@nestjs/swagger';
 import { LoyaltyService } from './loyalty.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { CoffeeSize } from '@prisma/client';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { ClaimCoffeeDto } from './dto/claim-coffee.dto';
 
 @ApiTags('Loyalty')
 @Controller('loyalty')
@@ -50,12 +57,26 @@ export class LoyaltyController {
     return this.loyaltyService.getPunchCards(user.id);
   }
 
-  @Post('punch-cards/:size/claim')
+  // ==================== STAFF ====================
+
+  @Get('staff/customer/:qrCode')
   @ApiBearerAuth()
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Claim free coffee for completed punch card' })
-  @ApiParam({ name: 'size', enum: ['S', 'M', 'L'], description: 'Coffee size' })
-  claimFreeCoffee(@CurrentUser() user: any, @Param('size') size: CoffeeSize) {
-    return this.loyaltyService.claimFreeCoffee(user.id, size);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'SUPPORT')
+  @ApiOperation({ summary: 'Find customer and punch cards by QR code (Staff)' })
+  @ApiParam({ name: 'qrCode', description: 'Customer QR code' })
+  findCustomer(@Param('qrCode') qrCode: string) {
+    return this.loyaltyService.findCustomerByQr(qrCode);
+  }
+
+  @Post('staff/claim')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'SUPPORT')
+  @ApiOperation({
+    summary: 'Give out free coffee for a completed punch card (Staff)',
+  })
+  claimFreeCoffee(@Body() dto: ClaimCoffeeDto) {
+    return this.loyaltyService.claimFreeCoffee(dto.qrCode, dto.size);
   }
 }

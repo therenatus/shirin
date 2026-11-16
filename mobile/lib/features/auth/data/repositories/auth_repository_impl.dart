@@ -49,7 +49,10 @@ class AuthRepositoryImpl implements AuthRepository {
         lastName: 'Пользователь',
         loyaltyPoints: 150,
       );
-      await _localDatasource.cacheTokens('test-access-token', 'test-refresh-token');
+      await _localDatasource.cacheTokens(
+        'test-access-token',
+        'test-refresh-token',
+      );
       await _localDatasource.cacheUser(testUser);
       return Right(testUser.toEntity());
     }
@@ -104,7 +107,9 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<Either<Failure, User>> updateProfile(UpdateProfileParams params) async {
+  Future<Either<Failure, User>> updateProfile(
+    UpdateProfileParams params,
+  ) async {
     if (await _isTestMode) {
       // For test mode, return updated user from cache
       final cachedUser = await _localDatasource.getCachedUser();
@@ -141,7 +146,8 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<Either<Failure, void>> logout() async {
     try {
-      await _remoteDatasource.logout();
+      final refreshToken = await _localDatasource.getRefreshToken();
+      await _remoteDatasource.logout(refreshToken);
     } catch (_) {
       // Logout locally even if remote fails
     }

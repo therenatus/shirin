@@ -10,5 +10,7 @@ void main() {
   testWidgets('App renders without error', (WidgetTester tester) async {
     await tester.pumpWidget(const ShirinApp());
     await tester.pump();
+    // Let the splash timers fire so none are pending when the test ends.
+    await tester.pump(const Duration(seconds: 5));
   });
 }

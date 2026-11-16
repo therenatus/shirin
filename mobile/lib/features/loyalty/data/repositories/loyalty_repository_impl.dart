@@ -33,6 +33,8 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
       return Right(model.toEntity());
     } on NetworkException {
       return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
@@ -48,6 +50,8 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
       return Right(models.map((m) => m.toEntity()).toList());
     } on NetworkException {
       return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
@@ -96,21 +100,8 @@ class LoyaltyRepositoryImpl implements LoyaltyRepository {
       return Right(models.map((m) => m.toEntity()).toList());
     } on NetworkException {
       return const Left(NetworkFailure());
-    } on ServerException catch (e) {
-      return Left(ServerFailure(e.message));
-    }
-  }
-
-  @override
-  Future<Either<Failure, PunchCard>> claimFreeCoffee(CoffeeSize size) async {
-    if (await _isTestMode) {
-      return Left(const ServerFailure('Test mode: cannot claim'));
-    }
-    try {
-      final model = await _remoteDatasource.claimFreeCoffee(size.name);
-      return Right(model.toEntity());
-    } on NetworkException {
-      return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }

@@ -1,16 +1,20 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:pin_code_fields/pin_code_fields.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/constants/app_text_styles.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
 
+/// SMS code entry. Same quiet layout as the phone screen: large title,
+/// glass capsule cells, one prominent action.
 class OtpVerificationPage extends StatefulWidget {
   final String phone;
 
@@ -20,102 +24,78 @@ class OtpVerificationPage extends StatefulWidget {
   State<OtpVerificationPage> createState() => _OtpVerificationPageState();
 }
 
-class _OtpVerificationPageState extends State<OtpVerificationPage>
-    with SingleTickerProviderStateMixin {
-  final _otpController = TextEditingController();
-  final _focusNode = FocusNode();
+class _OtpVerificationPageState extends State<OtpVerificationPage> {
+  final _codeController = TextEditingController();
+  final _codeFocus = FocusNode();
   Timer? _timer;
   int _secondsRemaining = AppConstants.otpResendSeconds;
-  bool _canResend = false;
   bool _hasError = false;
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
     _startTimer();
-
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.15),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
-    );
-    _animationController.forward();
-
-    // Auto focus
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) _focusNode.requestFocus();
-    });
   }
 
   void _startTimer() {
-    _secondsRemaining = AppConstants.otpResendSeconds;
-    _canResend = false;
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        if (_secondsRemaining > 0) {
-          _secondsRemaining--;
-        } else {
-          _canResend = true;
-          _timer?.cancel();
-        }
-      });
+    _timer?.cancel();
+    setState(() => _secondsRemaining = AppConstants.otpResendSeconds);
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      if (_secondsRemaining <= 1) {
+        t.cancel();
+        setState(() => _secondsRemaining = 0);
+      } else {
+        setState(() => _secondsRemaining--);
+      }
     });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _otpController.dispose();
-    _focusNode.dispose();
-    _animationController.dispose();
+    _codeController.dispose();
+    _codeFocus.dispose();
     super.dispose();
   }
 
-  void _onVerify(String code) {
+  void _verify(String code) {
     if (code.length != AppConstants.otpLength) return;
     HapticFeedback.mediumImpact();
     setState(() => _hasError = false);
     context.read<AuthBloc>().add(
-          VerifyCodeRequested(phone: widget.phone, code: code),
-        );
+      VerifyCodeRequested(phone: widget.phone, code: code),
+    );
   }
 
-  void _onResend() {
+  void _onCodeChanged(String value) {
+    if (_hasError) setState(() => _hasError = false);
+    // Auto-submit once all digits are in (also covers SMS autofill / paste).
+    if (value.length == AppConstants.otpLength) _verify(value);
+  }
+
+  void _resend() {
     HapticFeedback.lightImpact();
+    _codeController.clear();
+    setState(() => _hasError = false);
     context.read<AuthBloc>().add(SendCodeRequested(widget.phone));
     _startTimer();
-    _otpController.clear();
-    _showSuccessSnackBar('Код отправлен повторно');
   }
 
-  String get _formattedTime {
-    final minutes = _secondsRemaining ~/ 60;
-    final seconds = _secondsRemaining % 60;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
-  }
+  void _back() => context.canPop() ? context.pop() : context.go('/login');
 
-  String get _formattedPhone {
-    final phone = widget.phone;
-    if (phone.length >= 12) {
-      return '${phone.substring(0, 4)} ${phone.substring(4, 7)} ${phone.substring(7, 9)} ${phone.substring(9, 11)} ${phone.substring(11)}';
+  String _prettyPhone(String raw) {
+    final d = raw.replaceAll(RegExp(r'\D'), '');
+    if (d.length == 12) {
+      return '+${d.substring(0, 3)} ${d.substring(3, 6)} ${d.substring(6, 8)} ${d.substring(8, 10)} ${d.substring(10)}';
     }
-    return phone;
+    return raw;
   }
 
   @override
   Widget build(BuildContext context) {
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final mm = (_secondsRemaining ~/ 60).toString().padLeft(2, '0');
+    final ss = (_secondsRemaining % 60).toString().padLeft(2, '0');
 
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
@@ -123,587 +103,368 @@ class _OtpVerificationPageState extends State<OtpVerificationPage>
           context.go('/home');
         } else if (state is AuthError) {
           setState(() => _hasError = true);
-          _showErrorSnackBar(state.message);
-          _otpController.clear();
           HapticFeedback.heavyImpact();
+          showGlassToast(
+            context,
+            state.message,
+            icon: Icons.error_outline_rounded,
+          );
         }
       },
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        body: Stack(
-          children: [
-            // Background decorations
-            Positioned(
-              top: -60,
-              left: -60,
-              child: Container(
-                width: 200,
-                height: 200,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      AppColors.purple.withValues(alpha: 0.1),
-                      AppColors.purple.withValues(alpha: 0.0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 150,
-              right: -80,
-              child: Container(
-                width: 220,
-                height: 220,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      AppColors.primary.withValues(alpha: 0.08),
-                      AppColors.primary.withValues(alpha: 0.0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // Main content
-            SafeArea(
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
+      child: LiquidBackground(
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          resizeToAvoidBottomInset: true,
+          body: SafeArea(
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        const SizedBox(height: 16),
-
-                        // Back button
-                        GestureDetector(
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            context.pop();
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.05),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Icon(
-                              Icons.arrow_back_rounded,
-                              color: AppColors.textPrimary,
-                              size: 22,
-                            ),
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: GlassIconButton(
+                            icon: Icons.arrow_back_ios_new_rounded,
+                            iconSize: 19,
+                            tooltip: 'Назад',
+                            onTap: _back,
                           ),
                         ),
-
-                        const SizedBox(height: 32),
-
-                        // Title
+                        const SizedBox(height: 36),
+                        Text(
+                          'КОД ИЗ SMS',
+                          style: AppTextStyles.overline.copyWith(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         Text(
                           'Введите код',
-                          style: GoogleFonts.nunito(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
-                          ),
+                          style: AppTextStyles.display,
+                          textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 12),
-
-                        // Phone display
-                        Row(
-                          children: [
-                            Text(
-                              'Код отправлен на номер',
-                              style: GoogleFonts.nunito(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textLight,
-                              ),
+                        const SizedBox(height: 10),
+                        Text.rich(
+                          TextSpan(
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.textSecondary,
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
+                            children: [
+                              const TextSpan(
+                                text: 'Отправили 4 цифры на номер\n',
                               ),
-                              decoration: BoxDecoration(
-                                color: AppColors.purpleSoft,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.phone_android_rounded,
-                                    size: 16,
-                                    color: AppColors.purple,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _formattedPhone,
-                                    style: GoogleFonts.nunito(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.purple,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: () {
-                                HapticFeedback.lightImpact();
-                                context.pop();
-                              },
-                              child: Text(
-                                'Изменить',
-                                style: GoogleFonts.nunito(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textLight,
-                                  decoration: TextDecoration.underline,
+                              TextSpan(
+                                text: _prettyPhone(widget.phone),
+                                style: AppTextStyles.label.copyWith(
+                                  fontSize: 15,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
                                 ),
                               ),
-                            ),
-                          ],
+                              const TextSpan(text: '  '),
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: GestureDetector(
+                                  onTap: _back,
+                                  child: Text(
+                                    'Изменить',
+                                    style: AppTextStyles.label.copyWith(
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-
-                        const SizedBox(height: 40),
-
-                        // OTP Input
-                        PinCodeTextField(
-                          appContext: context,
+                        const SizedBox(height: 36),
+                        _GlassCodeInput(
+                          controller: _codeController,
+                          focusNode: _codeFocus,
                           length: AppConstants.otpLength,
-                          controller: _otpController,
-                          focusNode: _focusNode,
-                          keyboardType: TextInputType.number,
-                          animationType: AnimationType.scale,
-                          autoFocus: false,
-                          enablePinAutofill: true,
-                          hapticFeedbackTypes: HapticFeedbackTypes.light,
-                          pinTheme: PinTheme(
-                            shape: PinCodeFieldShape.box,
-                            borderRadius: BorderRadius.circular(16),
-                            fieldHeight: 64,
-                            fieldWidth: 56,
-                            activeFillColor: Colors.white,
-                            inactiveFillColor: Colors.white,
-                            selectedFillColor: Colors.white,
-                            activeColor: _hasError
-                                ? AppColors.error
-                                : AppColors.purple,
-                            inactiveColor: AppColors.divider,
-                            selectedColor: AppColors.purple,
-                            activeBorderWidth: 2,
-                            selectedBorderWidth: 2,
-                            inactiveBorderWidth: 1.5,
-                            errorBorderColor: AppColors.error,
-                          ),
-                          boxShadows: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.04),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                          enableActiveFill: true,
-                          textStyle: GoogleFonts.nunito(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
-                          ),
-                          cursorColor: AppColors.purple,
-                          animationDuration: const Duration(milliseconds: 200),
-                          onCompleted: _onVerify,
-                          onChanged: (value) {
-                            if (_hasError) {
-                              setState(() => _hasError = false);
-                            }
-                          },
+                          hasError: _hasError,
+                          onChanged: _onCodeChanged,
                         ),
-
-                        const SizedBox(height: 32),
-
-                        // Confirm button
-                        BlocBuilder<AuthBloc, AuthState>(
-                          builder: (context, state) {
-                            final isLoading = state is AuthLoading;
-                            final isValid = _otpController.text.length ==
-                                AppConstants.otpLength;
-
-                            return GestureDetector(
-                              onTap: isValid && !isLoading
-                                  ? () => _onVerify(_otpController.text)
-                                  : null,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                width: double.infinity,
-                                height: 60,
-                                decoration: BoxDecoration(
-                                  gradient: isValid
-                                      ? LinearGradient(
-                                          begin: Alignment.topLeft,
-                                          end: Alignment.bottomRight,
-                                          colors: [
-                                            AppColors.purple,
-                                            AppColors.purpleDark,
-                                          ],
-                                        )
-                                      : null,
-                                  color: isValid ? null : AppColors.divider,
-                                  borderRadius: BorderRadius.circular(18),
-                                  boxShadow: isValid
-                                      ? [
-                                          BoxShadow(
-                                            color: AppColors.purple
-                                                .withValues(alpha: 0.4),
-                                            blurRadius: 20,
-                                            offset: const Offset(0, 8),
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                                child: Center(
-                                  child: isLoading
-                                      ? SizedBox(
-                                          width: 24,
-                                          height: 24,
-                                          child: CircularProgressIndicator(
-                                            color: Colors.white,
-                                            strokeWidth: 2.5,
-                                          ),
-                                        )
-                                      : Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(
-                                              Icons.verified_rounded,
-                                              color: isValid
-                                                  ? Colors.white
-                                                  : AppColors.textLight,
-                                              size: 22,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Text(
-                                              'Подтвердить',
-                                              style: GoogleFonts.nunito(
-                                                fontSize: 17,
-                                                fontWeight: FontWeight.w700,
-                                                color: isValid
-                                                    ? Colors.white
-                                                    : AppColors.textLight,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-
-                        const SizedBox(height: 32),
-
-                        // Resend section
-                        Center(
-                          child: _canResend
-                              ? GestureDetector(
-                                  onTap: _onResend,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 12,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.purpleSoft,
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.refresh_rounded,
-                                          color: AppColors.purple,
-                                          size: 20,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'Отправить код повторно',
-                                          style: GoogleFonts.nunito(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.purple,
-                                          ),
-                                        ),
-                                      ],
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 200),
+                          child: _hasError
+                              ? Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: Text(
+                                    'Код не подошёл. Проверьте цифры или запросите новый.',
+                                    textAlign: TextAlign.center,
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: AppColors.error,
                                     ),
                                   ),
                                 )
-                              : Column(
-                                  children: [
-                                    Text(
-                                      'Отправить повторно через',
-                                      style: GoogleFonts.nunito(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.textLight,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(12),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.black
-                                                .withValues(alpha: 0.04),
-                                            blurRadius: 8,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.timer_outlined,
-                                            color: AppColors.purple,
-                                            size: 20,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            _formattedTime,
-                                            style: GoogleFonts.nunito(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppColors.purple,
-                                              fontFeatures: [
-                                                const FontFeature.tabularFigures(),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                              : const SizedBox(width: double.infinity),
                         ),
-
-                        const Spacer(),
-
-                        // Help text
-                        Padding(
-                          padding: EdgeInsets.only(bottom: bottomPadding + 20),
-                          child: Center(
-                            child: GestureDetector(
-                              onTap: () {
-                                HapticFeedback.lightImpact();
-                                _showHelpBottomSheet();
-                              },
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.help_outline_rounded,
-                                    color: AppColors.textLight,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Не получили код?',
-                                    style: GoogleFonts.nunito(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.textLight,
+                        const SizedBox(height: 28),
+                        BlocBuilder<AuthBloc, AuthState>(
+                          builder: (context, state) {
+                            final loading = state is AuthLoading;
+                            return GlassButton(
+                              label: 'Подтвердить',
+                              prominent: true,
+                              expanded: true,
+                              loading: loading,
+                              onTap: loading
+                                  ? null
+                                  : () => _verify(_codeController.text),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        Center(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 250),
+                            child: _secondsRemaining > 0
+                                ? Padding(
+                                    key: const ValueKey('timer'),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 10,
                                     ),
+                                    child: Text(
+                                      'Отправить код ещё раз через $mm:$ss',
+                                      style: AppTextStyles.bodySmall.copyWith(
+                                        fontFeatures: const [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                : GlassChip(
+                                    key: const ValueKey('resend'),
+                                    label: 'Отправить код ещё раз',
+                                    icon: Icons.refresh_rounded,
+                                    onTap: _resend,
                                   ),
-                                ],
-                              ),
-                            ),
                           ),
                         ),
+                        const Spacer(),
+                        const SizedBox(height: 16),
                       ],
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
+}
 
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.error_outline_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                message,
-                style: GoogleFonts.nunito(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: AppColors.error,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+/// Row of glass capsule cells over one invisible [TextField], which is the
+/// first text field on the page (integration test enters the code into it).
+/// The field receives taps, paste and iOS one-time-code autofill.
+class _GlassCodeInput extends StatefulWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final int length;
+  final bool hasError;
+  final ValueChanged<String> onChanged;
+
+  const _GlassCodeInput({
+    required this.controller,
+    required this.focusNode,
+    required this.length,
+    required this.hasError,
+    required this.onChanged,
+  });
+
+  @override
+  State<_GlassCodeInput> createState() => _GlassCodeInputState();
+}
+
+class _GlassCodeInputState extends State<_GlassCodeInput> {
+  static const double _cellHeight = 72;
+  static const double _maxCellWidth = 64;
+  static const double _gap = 12;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_rebuild);
+    widget.focusNode.addListener(_rebuild);
   }
 
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.check_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              message,
-              style: GoogleFonts.nunito(fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        backgroundColor: AppColors.success,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+  @override
+  void dispose() {
+    widget.controller.removeListener(_rebuild);
+    widget.focusNode.removeListener(_rebuild);
+    super.dispose();
   }
 
-  void _showHelpBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: EdgeInsets.fromLTRB(
-          24,
-          24,
-          24,
-          MediaQuery.of(context).padding.bottom + 24,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.divider,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.purpleSoft,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.sms_rounded,
-                color: AppColors.purple,
-                size: 32,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Не получили код?',
-              style: GoogleFonts.nunito(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Проверьте правильность номера телефона.\nСМС может прийти с задержкой до 2 минут.\nПроверьте папку "Спам" в сообщениях.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.nunito(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textLight,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 24),
-            GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                width: double.infinity,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.purple,
-                  borderRadius: BorderRadius.circular(14),
+  void _rebuild() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final code = widget.controller.text;
+    final focused = widget.focusNode.hasFocus;
+
+    // Fixed height outside the LayoutBuilder: SliverFillRemaining asks for
+    // intrinsic height, which LayoutBuilder cannot answer.
+    return SizedBox(
+      height: _cellHeight,
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final fit = (c.maxWidth - _gap * (widget.length - 1)) / widget.length;
+          final cellWidth = fit.clamp(44.0, _maxCellWidth);
+
+          return SizedBox(
+            height: _cellHeight,
+            child: Stack(
+              children: [
+                IgnorePointer(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (var i = 0; i < widget.length; i++) ...[
+                        if (i > 0) const SizedBox(width: _gap),
+                        _CodeCell(
+                          width: cellWidth,
+                          height: _cellHeight,
+                          digit: i < code.length ? code[i] : null,
+                          active:
+                              focused &&
+                              (i == code.length ||
+                                  (code.length == widget.length &&
+                                      i == widget.length - 1)),
+                          error: widget.hasError,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-                child: Center(
-                  child: Text(
-                    'Понятно',
-                    style: GoogleFonts.nunito(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                // Invisible input on top: receives taps, paste and autofill.
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: 0,
+                    child: TextField(
+                      controller: widget.controller,
+                      focusNode: widget.focusNode,
+                      autofocus: true,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.oneTimeCode],
+                      maxLength: widget.length,
+                      showCursor: false,
+                      enableInteractiveSelection: false,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      onChanged: widget.onChanged,
+                      style: const TextStyle(color: Colors.transparent),
+                      decoration: const InputDecoration(
+                        counterText: '',
+                        filled: false,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        isCollapsed: true,
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CodeCell extends StatelessWidget {
+  final double width;
+  final double height;
+  final String? digit;
+  final bool active;
+  final bool error;
+
+  const _CodeCell({
+    required this.width,
+    required this.height,
+    required this.digit,
+    required this.active,
+    required this.error,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(width / 2);
+    final ringColor = error
+        ? AppColors.error.withValues(alpha: 0.7)
+        : active
+        ? AppColors.primary.withValues(alpha: 0.6)
+        : Colors.white.withValues(alpha: 0);
+
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutBack,
+      scale: active ? 1.05 : 1,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        foregroundDecoration: BoxDecoration(
+          borderRadius: radius,
+          border: Border.all(color: ringColor, width: 1.5),
+        ),
+        child: LiquidGlass(
+          width: width,
+          height: height,
+          borderRadius: radius,
+          style: GlassStyle.regular.copyWith(
+            shadowOpacity: active ? 0.16 : 0.08,
+          ),
+          child: Center(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              transitionBuilder: (child, anim) => ScaleTransition(
+                scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+                child: FadeTransition(opacity: anim, child: child),
+              ),
+              child: digit != null
+                  ? Text(
+                      digit!,
+                      key: ValueKey('d$digit'),
+                      style: AppTextStyles.heading1.copyWith(
+                        color: error ? AppColors.error : AppColors.textPrimary,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    )
+                  : active
+                  ? Container(
+                      key: const ValueKey('cursor'),
+                      width: 2,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    )
+                  : Container(
+                      key: const ValueKey('dot'),
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: AppColors.textLight.withValues(alpha: 0.5),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+            ),
+          ),
         ),
       ),
     );

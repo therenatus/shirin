@@ -11,11 +11,21 @@ import UsersList from './pages/Users/UsersList';
 import PromotionsList from './pages/Promotions/PromotionsList';
 import StoresList from './pages/Stores/StoresList';
 import Login from './pages/Login/Login';
+import StaffClaim from './pages/Loyalty/StaffClaim';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+};
+
+/** SUPPORT staff only has access to the coffee claim page. */
+const AdminOnly: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const role = useAuthStore((s) => s.role);
+  if (role !== 'ADMIN') {
+    return <Navigate to="/loyalty" replace />;
   }
   return <>{children}</>;
 };
@@ -33,15 +43,16 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Dashboard />} />
-          <Route path="products" element={<ProductsList />} />
-          <Route path="products/new" element={<ProductForm />} />
-          <Route path="products/:id/edit" element={<ProductForm />} />
-          <Route path="orders" element={<OrdersList />} />
-          <Route path="orders/:id" element={<OrderDetails />} />
-          <Route path="users" element={<UsersList />} />
-          <Route path="promotions" element={<PromotionsList />} />
-          <Route path="stores" element={<StoresList />} />
+          <Route index element={<AdminOnly><Dashboard /></AdminOnly>} />
+          <Route path="products" element={<AdminOnly><ProductsList /></AdminOnly>} />
+          <Route path="products/new" element={<AdminOnly><ProductForm /></AdminOnly>} />
+          <Route path="products/:id/edit" element={<AdminOnly><ProductForm /></AdminOnly>} />
+          <Route path="orders" element={<AdminOnly><OrdersList /></AdminOnly>} />
+          <Route path="orders/:id" element={<AdminOnly><OrderDetails /></AdminOnly>} />
+          <Route path="loyalty" element={<StaffClaim />} />
+          <Route path="users" element={<AdminOnly><UsersList /></AdminOnly>} />
+          <Route path="promotions" element={<AdminOnly><PromotionsList /></AdminOnly>} />
+          <Route path="stores" element={<AdminOnly><StoresList /></AdminOnly>} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -25,9 +25,10 @@ class StoreModel {
       name: json['name'] as String,
       address: json['address'] as String,
       phone: json['phone'] as String?,
-      lat: (json['lat'] as num?)?.toDouble(),
-      lng: (json['lng'] as num?)?.toDouble(),
-      workingHours: json['workingHours'] as String?,
+      // Backend sends latitude/longitude/workHours; short names kept as fallback.
+      lat: ((json['latitude'] ?? json['lat']) as num?)?.toDouble(),
+      lng: ((json['longitude'] ?? json['lng']) as num?)?.toDouble(),
+      workingHours: (json['workHours'] ?? json['workingHours']) as String?,
     );
   }
 

@@ -1,11 +1,13 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:shimmer/shimmer.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_text_styles.dart';
 import '../../../../shared/widgets/add_to_cart_animation.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
+import '../../../../shared/widgets/ui_kit.dart';
 import '../../../products/domain/entities/product.dart';
 
+/// Compact product tile for horizontal rails: photo, name, price and a
+/// round add button that flies the photo to the cart.
 class ProductCardHorizontal extends StatefulWidget {
   final Product product;
   final VoidCallback? onTap;
@@ -65,192 +67,82 @@ class _ProductCardHorizontalState extends State<ProductCardHorizontal>
   }
 
   Widget _buildAnimatingWidget() {
-    return Container(
+    return SizedBox(
       width: 50,
       height: 50,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.4),
-            blurRadius: 12,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: widget.product.mainImage.isNotEmpty
-            ? Image.network(
-                widget.product.mainImage,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => _placeholderIcon(),
-              )
-            : _placeholderIcon(),
-      ),
-    );
-  }
-
-  Widget _placeholderIcon() {
-    return Container(
-      color: AppColors.primarySoft,
-      child: Icon(
-        Icons.cake_rounded,
-        size: 24,
-        color: AppColors.primary.withValues(alpha: 0.6),
-      ),
+      child: ProductImage(url: widget.product.mainImage, radius: 12, iconSize: 24),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: widget.onTap,
-      child: Container(
-        width: 160,
-        margin: const EdgeInsets.only(right: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.glassBorder, width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.08),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-              spreadRadius: -2,
-            ),
-            BoxShadow(
-              color: Colors.white.withValues(alpha: 0.80),
-              blurRadius: 2,
-              offset: const Offset(-1, -1),
-            ),
-          ],
-        ),
+    final p = widget.product;
+    return Container(
+      width: 160,
+      margin: const EdgeInsets.only(right: 12),
+      child: ContentCard(
+        onTap: widget.onTap,
+        padding: const EdgeInsets.all(8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image
-            Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                  child: Container(
-                    height: 120,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          AppColors.primarySoft.withValues(alpha: 0.30),
-                          AppColors.secondaryBackground.withValues(alpha: 0.50),
-                        ],
-                      ),
+            SizedBox(
+              height: 120,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ProductImage(url: p.mainImage, radius: 16),
+                  if (p.isNew)
+                    const Positioned(
+                      top: 8,
+                      left: 8,
+                      child: TagBadge(text: 'НОВИНКА'),
                     ),
-                    child: widget.product.mainImage.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: widget.product.mainImage,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => Shimmer.fromColors(
-                              baseColor: AppColors.shimmerBase,
-                              highlightColor: AppColors.shimmerHighlight,
-                              child: Container(color: AppColors.shimmerBase),
-                            ),
-                            errorWidget: (context, url, error) => _placeholder(),
-                          )
-                        : _placeholder(),
-                  ),
-                ),
-                if (widget.product.isNew)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: AppColors.bonusCardGradient,
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.25),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        'NEW',
-                        style: GoogleFonts.nunito(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+                ],
+              ),
             ),
-            // Info
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.fromLTRB(4, 10, 2, 2),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.product.name,
+                    p.name,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.nunito(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                      height: 1.2,
-                    ),
+                    style: AppTextStyles.label.copyWith(fontSize: 13, height: 1.2),
                   ),
                   const SizedBox(height: 8),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '${widget.product.price.toInt()} сом',
-                        style: GoogleFonts.nunito(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primary,
+                      Expanded(
+                        child: Text(
+                          formatPrice(p.price),
+                          maxLines: 1,
+                          overflow: TextOverflow.fade,
+                          softWrap: false,
+                          style: AppTextStyles.price.copyWith(
+                            fontSize: 14,
+                            color: AppColors.primary,
+                          ),
                         ),
                       ),
                       AnimatedBuilder(
                         animation: _scaleController,
-                        builder: (context, child) {
-                          return Transform.scale(
-                            scale: 1.0 - _scaleController.value,
-                            child: child,
-                          );
-                        },
+                        builder: (context, child) => Transform.scale(
+                          scale: 1.0 - _scaleController.value,
+                          child: child,
+                        ),
                         child: GestureDetector(
                           key: _addButtonKey,
                           onTap: _handleAddToCart,
                           child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [AppColors.primary, AppColors.primaryDark],
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primary.withValues(alpha: 0.30),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
+                            width: 32,
+                            height: 32,
+                            decoration: const BoxDecoration(
+                              color: AppColors.primary,
+                              shape: BoxShape.circle,
                             ),
                             child: const Icon(
                               Icons.add_rounded,
@@ -267,16 +159,6 @@ class _ProductCardHorizontalState extends State<ProductCardHorizontal>
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _placeholder() {
-    return Center(
-      child: Icon(
-        Icons.cake_rounded,
-        color: AppColors.primary.withValues(alpha: 0.35),
-        size: 40,
       ),
     );
   }

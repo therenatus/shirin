@@ -1,12 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 import '../../../../shared/widgets/loading_widget.dart';
-import '../../../cart/presentation/bloc/cart_bloc.dart';
-import '../../../cart/presentation/bloc/cart_event.dart';
 import '../../domain/entities/category.dart';
 import '../bloc/products_bloc.dart';
 import '../bloc/products_event.dart';
@@ -14,6 +14,8 @@ import '../bloc/products_state.dart';
 import '../widgets/filter_bottom_sheet.dart';
 import '../widgets/product_card.dart';
 
+/// Menu: large title, glass search field, a row of glass category chips that
+/// pins under the top bar, and a two-column grid of product cards.
 class ProductsListPage extends StatefulWidget {
   final String? categoryId;
   final String? categoryName;
@@ -28,77 +30,93 @@ class _ProductsListPageState extends State<ProductsListPage> {
   final _scrollController = ScrollController();
   final _searchController = TextEditingController();
   List<Category> _categories = [];
-  bool _showCategories = true;
+  String? _selectedCategoryId;
+  Timer? _debounce;
+  final _chipsKey = GlobalKey();
+  final _chipsPinned = ValueNotifier<bool>(false);
 
-  // Category styles with images like home page
-  static const List<_CategoryStyle> _categoryStyles = [
-    _CategoryStyle(
-      color: Color(0xFFCCE5E0),  // Teal
-      imageUrl: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400&q=80',
-    ),
-    _CategoryStyle(
-      color: Color(0xFFF5D5E0),  // Pink
-      imageUrl: 'https://images.unsplash.com/photo-1486427944299-d1955d23e34d?w=400&q=80',
-    ),
-    _CategoryStyle(
-      color: Color(0xFFE8F5E9),  // Mint
-      imageUrl: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=400&q=80',
-    ),
-    _CategoryStyle(
-      color: Color(0xFFF3E5F5),  // Lavender
-      imageUrl: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&q=80',
-    ),
-    _CategoryStyle(
-      color: Color(0xFFD0E8E8),  // Turquoise
-      imageUrl: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=400&q=80',
-    ),
-    _CategoryStyle(
-      color: Color(0xFFFFF0D5),  // Yellow/Orange
-      imageUrl: 'https://images.unsplash.com/photo-1481391319762-47dff72954d9?w=400&q=80',
-    ),
-  ];
+  /// The bloc emits category states on the same stream as product states;
+  /// keep the last product list so the grid does not flicker to a spinner.
+  ProductsLoaded? _lastProducts;
 
   @override
   void initState() {
     super.initState();
-    _showCategories = widget.categoryId == null;
-    context.read<ProductsBloc>().add(LoadProducts(categoryId: widget.categoryId));
+    _selectedCategoryId = widget.categoryId;
     context.read<ProductsBloc>().add(const LoadCategories());
     _scrollController.addListener(_onScroll);
   }
 
   void _onScroll() {
+    _updatePinnedChips();
     if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
+        _scrollController.position.maxScrollExtent - 300) {
       context.read<ProductsBloc>().add(const LoadMoreProducts());
     }
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _scrollController.dispose();
     _searchController.dispose();
+    _chipsPinned.dispose();
     super.dispose();
   }
 
-  void _onSearch(String query) {
-    setState(() => _showCategories = query.isEmpty && widget.categoryId == null);
+  void _load({String? search}) {
     context.read<ProductsBloc>().add(LoadProducts(
-          search: query.isNotEmpty ? query : null,
-          categoryId: widget.categoryId,
+          categoryId: _selectedCategoryId,
+          search: (search ?? _searchController.text).trim().isEmpty
+              ? null
+              : (search ?? _searchController.text).trim(),
         ));
   }
 
-  void _showFilters() async {
-    final result = await showModalBottomSheet<Map<String, dynamic>>(
+  void _onSearchChanged(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (mounted) _load(search: value);
+    });
+    setState(() {});
+  }
+
+  void _selectCategory(String? id) {
+    if (_selectedCategoryId == id) return;
+    setState(() => _selectedCategoryId = id);
+    _load();
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+
+  /// Shows the floating chip row once the in-content row slides under the bar.
+  void _updatePinnedChips() {
+    final box = _chipsKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return;
+    final top = box.localToGlobal(Offset.zero).dy;
+    final barBottom = MediaQuery.paddingOf(context).top + GlassTopBar.barHeight;
+    final pinned = top < barBottom - 4;
+    if (pinned != _chipsPinned.value) _chipsPinned.value = pinned;
+  }
+
+  Future<void> _showFilters() async {
+    final result = await showGlassSheet<Map<String, dynamic>>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => FilterBottomSheet(categories: _categories),
+      builder: (_) => FilterBottomSheet(
+        categories: _categories,
+        selectedCategoryId: _selectedCategoryId,
+      ),
     );
     if (result != null && mounted) {
+      setState(() => _selectedCategoryId = result['categoryId'] as String?);
       context.read<ProductsBloc>().add(LoadProducts(
-            categoryId: result['categoryId'] as String?,
+            categoryId: _selectedCategoryId,
             sortBy: result['sortBy'] as String?,
             isNew: result['isNew'] as bool?,
             minPrice: result['minPrice'] as double?,
@@ -107,414 +125,262 @@ class _ProductsListPageState extends State<ProductsListPage> {
     }
   }
 
+  String get _title {
+    if (widget.categoryName != null) return widget.categoryName!;
+    return 'Меню';
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Header
-            _buildHeader(),
-
-            // Search bar
-            _buildSearchBar(),
-
-            // Content
-            Expanded(
-              child: BlocConsumer<ProductsBloc, ProductsState>(
-                listener: (context, state) {
-                  if (state is CategoriesLoaded) {
-                    _categories = state.categories;
-                  }
-                },
-                builder: (context, state) {
-                  if (state is ProductsLoading && _categories.isEmpty) {
-                    return const LoadingWidget();
-                  }
-
-                  return CustomScrollView(
-                    controller: _scrollController,
-                    slivers: [
-                      // Categories Grid (only when no category selected)
-                      if (_showCategories && _categories.isNotEmpty)
-                        SliverToBoxAdapter(
-                          child: _buildCategoriesGrid(),
-                        ),
-
-                      // Products Grid
-                      if (state is ProductsLoaded) ...[
-                        if (!_showCategories || state.products.isNotEmpty)
-                          SliverPadding(
-                            padding: const EdgeInsets.all(16),
-                            sliver: SliverGrid(
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
-                                childAspectRatio: 0.68,
-                              ),
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  if (index >= state.products.length) {
-                                    return const Center(
-                                        child: LoadingWidget(size: 24));
-                                  }
-                                  final product = state.products[index];
-                                  return ProductCard(
-                                    product: product,
-                                    onTap: () =>
-                                        context.push('/product/${product.id}'),
-                                    onAddToCart: () {
-                                      context
-                                          .read<CartBloc>()
-                                          .add(AddToCart(product));
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            '${product.name} добавлен в корзину',
-                                            style: GoogleFonts.nunito(
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                          duration:
-                                              const Duration(seconds: 1),
-                                          behavior: SnackBarBehavior.floating,
-                                          backgroundColor: AppColors.primary,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  );
-                                },
-                                childCount: state.products.length +
-                                    (state.hasReachedMax ? 0 : 1),
-                              ),
-                            ),
-                          ),
-                      ] else if (state is ProductsError)
-                        SliverFillRemaining(
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(state.message,
-                                    style: AppTextStyles.bodyMedium),
-                                const SizedBox(height: 12),
-                                TextButton(
-                                  onPressed: () => context
-                                      .read<ProductsBloc>()
-                                      .add(LoadProducts(
-                                          categoryId: widget.categoryId)),
-                                  child: const Text('Повторить'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                      // Bottom padding for nav bar
-                      const SliverToBoxAdapter(
-                        child: SizedBox(height: 100),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Row(
-        children: [
-          if (widget.categoryId != null)
-            GestureDetector(
-              onTap: () => Navigator.of(context).pop(),
-              child: Container(
-                width: 44,
-                height: 44,
-                margin: const EdgeInsets.only(right: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.arrow_back_rounded,
-                  color: AppColors.textPrimary,
-                  size: 22,
-                ),
-              ),
-            ),
-          Expanded(
-            child: Text(
-              widget.categoryName ?? 'Каталог',
-              style: GoogleFonts.nunito(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
-            ),
-          ),
-          // Filter button
-          _buildHeaderButton(
-            icon: Icons.tune_rounded,
-            onTap: _showFilters,
-          ),
-          const SizedBox(width: 10),
-          // Favorites button
-          _buildHeaderButton(
-            icon: Icons.favorite_rounded,
-            isPrimary: true,
-            onTap: () {},
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeaderButton({
-    required IconData icon,
-    required VoidCallback onTap,
-    bool isPrimary = false,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: isPrimary ? AppColors.primarySoft : Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Icon(
-          icon,
-          color: AppColors.primary,
-          size: 22,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: TextField(
-          controller: _searchController,
-          onChanged: _onSearch,
-          style: GoogleFonts.nunito(
-            fontSize: 15,
-            color: AppColors.textPrimary,
-          ),
-          decoration: InputDecoration(
-            hintText: 'Я ищу...',
-            hintStyle: GoogleFonts.nunito(
-              fontSize: 15,
-              color: AppColors.textLight,
-            ),
-            prefixIcon: const Icon(
-              Icons.search_rounded,
-              color: AppColors.textLight,
-              size: 22,
-            ),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 20),
-                    color: AppColors.textSecondary,
-                    onPressed: () {
-                      _searchController.clear();
-                      _onSearch('');
-                    },
-                  )
-                : null,
-            filled: true,
-            fillColor: Colors.transparent,
-            border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCategoriesGrid() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          // Row 1
-          Row(
-            children: [
-              if (_categories.isNotEmpty)
-                Expanded(child: _buildCategoryCard(_categories[0], 0)),
-              const SizedBox(width: 12),
-              if (_categories.length > 1)
-                Expanded(child: _buildCategoryCard(_categories[1], 1)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Row 2
-          if (_categories.length > 2)
-            Row(
-              children: [
-                Expanded(child: _buildCategoryCard(_categories[2], 2)),
-                const SizedBox(width: 12),
-                if (_categories.length > 3)
-                  Expanded(child: _buildCategoryCard(_categories[3], 3)),
-              ],
-            ),
-          if (_categories.length > 2) const SizedBox(height: 12),
-          // Row 3
-          if (_categories.length > 4)
-            Row(
-              children: [
-                Expanded(child: _buildCategoryCard(_categories[4], 4)),
-                const SizedBox(width: 12),
-                if (_categories.length > 5)
-                  Expanded(child: _buildCategoryCard(_categories[5], 5)),
-              ],
-            ),
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCategoryCard(Category category, int index) {
-    final style = _categoryStyles[index % _categoryStyles.length];
-
-    return GestureDetector(
-      onTap: () {
-        context.push('/catalog/${category.id}', extra: category.name);
+    final topInset = MediaQuery.paddingOf(context).top;
+    return BlocConsumer<ProductsBloc, ProductsState>(
+      listener: (context, state) {
+        if (state is CategoriesLoaded) {
+          setState(() => _categories = state.categories);
+        } else if (state is ProductsLoaded) {
+          _lastProducts = state;
+        } else if (state is ProductsLoading) {
+          _lastProducts = null;
+        }
       },
-      child: Container(
-        height: 150,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
+      builder: (context, rawState) {
+        final state = (rawState is CategoriesLoaded || rawState is CategoriesLoading) &&
+                _lastProducts != null
+            ? _lastProducts!
+            : rawState;
+        return Stack(
           children: [
-            // Full card image
-            Image.network(
-              style.imageUrl,
-              fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  color: style.color,
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        AppColors.primary.withValues(alpha: 0.5),
-                      ),
+            GlassPage(
+              title: _title,
+              eyebrow: widget.categoryId == null ? 'Кондитерская Ширин' : null,
+              controller: _scrollController,
+              backgroundIntensity: 0.8,
+              onBack: widget.categoryId != null
+                  ? () => context.canPop() ? context.pop() : context.go('/catalog')
+                  : null,
+              actions: [
+                GlassIconButton(
+                  icon: Icons.tune_rounded,
+                  tooltip: 'Фильтры',
+                  onTap: _showFilters,
+                ),
+              ],
+              onRefresh: () async => _load(),
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                    child: GlassTextField(
+                      controller: _searchController,
+                      hint: 'Торт, эклер, латте…',
+                      icon: Icons.search_rounded,
+                      textInputAction: TextInputAction.search,
+                      onChanged: _onSearchChanged,
+                      suffix: _searchController.text.isNotEmpty
+                          ? GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                _searchController.clear();
+                                _onSearchChanged('');
+                              },
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(Icons.cancel_rounded,
+                                    size: 20, color: AppColors.textLight),
+                              ),
+                            )
+                          : null,
                     ),
                   ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: style.color,
-                  child: Icon(
-                    Icons.cake_rounded,
-                    size: 50,
-                    color: AppColors.primary.withValues(alpha: 0.5),
-                  ),
-                );
-              },
-            ),
-            // Gradient overlay for text readability
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.4),
-                    Colors.transparent,
-                  ],
-                  stops: const [0.0, 0.6],
                 ),
-              ),
+                SliverToBoxAdapter(
+                  child: KeyedSubtree(
+                    key: _chipsKey,
+                    child: _buildCategoryChips(),
+                  ),
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 8)),
+                ..._buildBody(state),
+              ],
             ),
-            // Category name
+            // Floating copy of the chips, pinned under the top bar.
             Positioned(
-              top: 14,
-              left: 14,
-              right: 14,
-              child: Text(
-                category.name,
-                style: GoogleFonts.nunito(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  height: 1.2,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
+              top: topInset + GlassTopBar.barHeight,
+              left: 0,
+              right: 0,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _chipsPinned,
+                builder: (context, pinned, child) => IgnorePointer(
+                  ignoring: !pinned,
+                  child: AnimatedSlide(
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutBack,
+                    offset: pinned ? Offset.zero : const Offset(0, -0.3),
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 200),
+                      opacity: pinned ? 1 : 0,
+                      child: child,
                     ),
-                  ],
+                  ),
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                child: _buildCategoryChips(),
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCategoryChips() {
+    return SizedBox(
+      height: 56,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        physics: const BouncingScrollPhysics(),
+        clipBehavior: Clip.none,
+        children: [
+          GlassChip(
+            label: 'Все',
+            selected: _selectedCategoryId == null,
+            onTap: () => _selectCategory(null),
+          ),
+          for (final c in _categories) ...[
+            const SizedBox(width: 8),
+            GlassChip(
+              label: c.name,
+              selected: _selectedCategoryId == c.id,
+              onTap: () => _selectCategory(c.id),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildBody(ProductsState state) {
+    if (state is ProductsLoaded) {
+      if (state.products.isEmpty) {
+        return [
+          SliverToBoxAdapter(
+            child: _EmptyState(
+              onReset: () {
+                _searchController.clear();
+                _selectCategory(null);
+                _load(search: '');
+              },
+            ),
+          ),
+        ];
+      }
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: ProductCard.gridAspectRatio,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                if (index >= state.products.length) {
+                  return const Center(child: LoadingWidget(size: 24));
+                }
+                final product = state.products[index];
+                return ProductCard(
+                  product: product,
+                  onTap: () => context.push('/product/${product.id}'),
+                );
+              },
+              childCount:
+                  state.products.length + (state.hasReachedMax ? 0 : 1),
+            ),
+          ),
+        ),
+      ];
+    }
+    if (state is ProductsError) {
+      return [
+        SliverToBoxAdapter(
+          child: _MessageState(
+            icon: Icons.wifi_off_rounded,
+            title: 'Не удалось загрузить меню',
+            message: state.message,
+            action: GlassButton(label: 'Повторить', onTap: _load),
+          ),
+        ),
+      ];
+    }
+    return const [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.only(top: 96),
+          child: LoadingWidget(),
         ),
       ),
+    ];
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final VoidCallback onReset;
+  const _EmptyState({required this.onReset});
+
+  @override
+  Widget build(BuildContext context) {
+    return _MessageState(
+      icon: Icons.search_off_rounded,
+      title: 'Ничего не нашли',
+      message: 'Попробуйте другое слово или сбросьте фильтры',
+      action: GlassButton(label: 'Показать всё', onTap: onReset),
     );
   }
 }
 
-class _CategoryStyle {
-  final Color color;
-  final String imageUrl;
+class _MessageState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  final Widget action;
 
-  const _CategoryStyle({
-    required this.color,
-    required this.imageUrl,
+  const _MessageState({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.action,
   });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(40, 56, 40, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.7),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 38, color: AppColors.textLight),
+          ),
+          const SizedBox(height: 20),
+          Text(title, style: AppTextStyles.heading3, textAlign: TextAlign.center),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodySmall,
+          ),
+          const SizedBox(height: 20),
+          action,
+        ],
+      ),
+    );
+  }
 }

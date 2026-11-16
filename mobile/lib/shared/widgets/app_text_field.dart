@@ -45,7 +45,7 @@ class AppTextField extends StatelessWidget {
       maxLength: maxLength,
       onChanged: onChanged,
       autofocus: autofocus,
-      style: GoogleFonts.nunito(
+      style: GoogleFonts.manrope(
         fontSize: 16,
         color: AppColors.textPrimary,
       ),

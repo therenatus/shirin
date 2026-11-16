@@ -8,5 +8,4 @@ abstract class LoyaltyRepository {
   Future<Either<Failure, LoyaltyInfo>> getLoyaltyInfo();
   Future<Either<Failure, List<LoyaltyTransaction>>> getLoyaltyHistory();
   Future<Either<Failure, List<PunchCard>>> getPunchCards();
-  Future<Either<Failure, PunchCard>> claimFreeCoffee(CoffeeSize size);
 }

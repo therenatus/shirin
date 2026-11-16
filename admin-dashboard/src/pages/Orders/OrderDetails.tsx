@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import { Order, OrderStatus } from '../../types';
-import { getMockOrders, isTestMode } from '../../services/mockData';
+import { ApiOrder, mapOrder, toApiStatus } from '../../services/mappers';
 import api from '../../services/api';
 
 const statusLabels: Record<OrderStatus, string> = {
@@ -11,11 +11,15 @@ const statusLabels: Record<OrderStatus, string> = {
   confirmed: 'Подтверждён',
   preparing: 'Готовится',
   ready: 'Готов',
+  delivering: 'В пути',
   delivered: 'Доставлен',
   cancelled: 'Отменён',
 };
 
-const statusFlow: OrderStatus[] = ['pending', 'confirmed', 'preparing', 'ready', 'delivered'];
+const getStatusFlow = (order: Order): OrderStatus[] =>
+  order.deliveryType === 'delivery'
+    ? ['pending', 'confirmed', 'preparing', 'ready', 'delivering', 'delivered']
+    : ['pending', 'confirmed', 'preparing', 'ready', 'delivered'];
 
 const OrderDetails: React.FC = () => {
   const { id } = useParams();
@@ -26,16 +30,10 @@ const OrderDetails: React.FC = () => {
   useEffect(() => {
     const fetchOrder = async () => {
       try {
-        if (isTestMode()) {
-          const found = getMockOrders().find((o) => o.id === id);
-          setOrder(found || null);
-        } else {
-          const response = await api.get(`/orders/${id}`);
-          setOrder(response.data);
-        }
+        const response = await api.get<ApiOrder>(`/orders/${id}`);
+        setOrder(mapOrder(response.data));
       } catch {
-        const found = getMockOrders().find((o) => o.id === id);
-        setOrder(found || null);
+        setOrder(null);
       } finally {
         setLoading(false);
       }
@@ -46,12 +44,12 @@ const OrderDetails: React.FC = () => {
   const handleStatusChange = async (newStatus: OrderStatus) => {
     if (!order) return;
     try {
-      if (!isTestMode()) {
-        await api.patch(`/orders/${id}/status`, { status: newStatus });
-      }
-      setOrder({ ...order, status: newStatus });
-    } catch {
-      alert('Ошибка при обновлении статуса');
+      const response = await api.patch<ApiOrder>(`/orders/${id}/status`, {
+        status: toApiStatus(newStatus),
+      });
+      setOrder({ ...mapOrder(response.data), userId: order.userId, userPhone: order.userPhone });
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Ошибка при обновлении статуса');
     }
   };
 
@@ -75,11 +73,12 @@ const OrderDetails: React.FC = () => {
     );
   }
 
+  const statusFlow = getStatusFlow(order);
   const currentIdx = statusFlow.indexOf(order.status);
 
   return (
     <div>
-      <Header title={`Заказ #${order.id.slice(-4)}`} />
+      <Header title={`Заказ ${order.orderNumber ?? `#${order.id.slice(-4)}`}`} />
       <div className="p-8">
         <button
           onClick={() => navigate('/orders')}
@@ -179,8 +178,8 @@ const OrderDetails: React.FC = () => {
                   </div>
                 )}
                 <div>
-                  <p className="text-gray-500">ID клиента</p>
-                  <p className="font-medium">{order.userId}</p>
+                  <p className="text-gray-500">Клиент</p>
+                  <p className="font-medium">{order.userPhone ?? order.userId}</p>
                 </div>
               </div>
             </div>

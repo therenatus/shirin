@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import { Product } from '../../types';
-import { getMockProducts, isTestMode } from '../../services/mockData';
 import api from '../../services/api';
 
 const ProductsList: React.FC = () => {
@@ -14,14 +13,13 @@ const ProductsList: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        if (isTestMode()) {
-          setProducts(getMockProducts());
-        } else {
-          const response = await api.get('/products');
-          setProducts(response.data);
-        }
+        const response = await api.get<{ data: Product[] }>('/products', {
+          params: { limit: 100 },
+        });
+        // Prisma Decimal fields arrive as strings
+        setProducts(response.data.data.map((p) => ({ ...p, price: Number(p.price) })));
       } catch {
-        setProducts(getMockProducts());
+        alert('Не удалось загрузить товары');
       } finally {
         setLoading(false);
       }
@@ -30,15 +28,13 @@ const ProductsList: React.FC = () => {
   }, []);
 
   const filteredProducts = products.filter((p) =>
-    p.nameRu.toLowerCase().includes(search.toLowerCase())
+    (p.nameRu || p.name).toLowerCase().includes(search.toLowerCase())
   );
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Удалить товар?')) return;
     try {
-      if (!isTestMode()) {
-        await api.delete(`/products/${id}`);
-      }
+      await api.delete(`/products/${id}`);
       setProducts((prev) => prev.filter((p) => p.id !== id));
     } catch (err) {
       alert('Ошибка при удалении');
@@ -94,7 +90,7 @@ const ProductsList: React.FC = () => {
                           <Package size={18} />
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{product.nameRu}</p>
+                          <p className="font-medium text-gray-900">{product.nameRu || product.name}</p>
                           {product.descriptionRu && (
                             <p className="text-xs text-gray-500 truncate max-w-xs">{product.descriptionRu}</p>
                           )}

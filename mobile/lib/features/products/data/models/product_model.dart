@@ -13,6 +13,7 @@ class ProductModel {
   final bool isAvailable;
   final double? weight;
   final String? composition;
+  final int? calories;
 
   const ProductModel({
     required this.id,
@@ -27,6 +28,7 @@ class ProductModel {
     this.isAvailable = true,
     this.weight,
     this.composition,
+    this.calories,
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
@@ -52,8 +54,9 @@ class ProductModel {
       categoryName: json['category']?['name'] as String?,
       isNew: json['isNew'] as bool? ?? false,
       isAvailable: json['isAvailable'] as bool? ?? true,
-      weight: parsePrice(json['weight']),
+      weight: json['weight'] == null ? null : parsePrice(json['weight']),
       composition: json['ingredients'] as String?,
+      calories: (json['calories'] as num?)?.toInt(),
     );
   }
 
@@ -71,6 +74,7 @@ class ProductModel {
       isAvailable: isAvailable,
       weight: weight,
       composition: composition,
+      calories: calories,
     );
   }
 }

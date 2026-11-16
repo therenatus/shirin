@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/constants/app_theme.dart';
 import 'core/di/injection_container.dart' as di;
 import 'core/router/app_router.dart';
@@ -29,6 +30,13 @@ class ShirinApp extends StatelessWidget {
         title: 'Ширин',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
+        locale: const Locale('ru'),
+        supportedLocales: const [Locale('ru'), Locale('ky'), Locale('en')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
         routerConfig: AppRouter.router,
       ),
     );

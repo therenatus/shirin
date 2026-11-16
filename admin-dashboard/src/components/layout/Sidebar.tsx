@@ -1,19 +1,24 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Package, ShoppingCart, Users, Tag, MapPin, LogOut } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, Users, Tag, MapPin, Coffee, LogOut } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
+const ADMIN_ONLY = ['ADMIN'];
+const STAFF = ['ADMIN', 'SUPPORT'];
+
 const navItems = [
-  { path: '/', icon: LayoutDashboard, label: 'Дашборд' },
-  { path: '/products', icon: Package, label: 'Товары' },
-  { path: '/orders', icon: ShoppingCart, label: 'Заказы' },
-  { path: '/users', icon: Users, label: 'Клиенты' },
-  { path: '/promotions', icon: Tag, label: 'Акции' },
-  { path: '/stores', icon: MapPin, label: 'Магазины' },
+  { path: '/', icon: LayoutDashboard, label: 'Дашборд', roles: ADMIN_ONLY },
+  { path: '/products', icon: Package, label: 'Товары', roles: ADMIN_ONLY },
+  { path: '/orders', icon: ShoppingCart, label: 'Заказы', roles: ADMIN_ONLY },
+  { path: '/loyalty', icon: Coffee, label: 'Выдача кофе', roles: STAFF },
+  { path: '/users', icon: Users, label: 'Клиенты', roles: ADMIN_ONLY },
+  { path: '/promotions', icon: Tag, label: 'Акции', roles: ADMIN_ONLY },
+  { path: '/stores', icon: MapPin, label: 'Магазины', roles: ADMIN_ONLY },
 ];
 
 const Sidebar: React.FC = () => {
   const logout = useAuthStore((s) => s.logout);
+  const role = useAuthStore((s) => s.role);
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 flex flex-col">
@@ -23,7 +28,7 @@ const Sidebar: React.FC = () => {
       </div>
 
       <nav className="flex-1 py-4 px-3">
-        {navItems.map((item) => (
+        {navItems.filter((item) => role && item.roles.includes(role)).map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

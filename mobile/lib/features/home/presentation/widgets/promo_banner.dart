@@ -1,37 +1,53 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_text_styles.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 
-class PromoBanner extends StatelessWidget {
+/// Paged promo banners in brand gradients, each with a clear-glass caption
+/// capsule.
+class PromoBanner extends StatefulWidget {
   const PromoBanner({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final banners = [
-      _BannerData(
-        title: 'Скидка 20%\nна торты',
-        subtitle: 'При заказе через приложение',
-        gradient: const [Color(0xFFD81B60), Color(0xFFAD1457)],
-      ),
-      _BannerData(
-        title: 'Новая\nколлекция',
-        subtitle: 'Весенние десерты уже в меню',
-        gradient: const [Color(0xFFFF5C8D), Color(0xFFD81B60)],
-      ),
-      _BannerData(
-        title: 'Бонусы x2',
-        subtitle: 'За каждый заказ в выходные',
-        gradient: const [Color(0xFFF472B6), Color(0xFFFF5C8D)],
-      ),
-    ];
+  State<PromoBanner> createState() => _PromoBannerState();
+}
 
+class _PromoBannerState extends State<PromoBanner> {
+  final _controller = PageController(viewportFraction: 0.9);
+
+  static const _banners = [
+    _BannerData(
+      title: 'Скидка 20%\nна торты',
+      subtitle: 'При заказе через приложение',
+      gradient: [AppColors.primary, AppColors.secondary],
+    ),
+    _BannerData(
+      title: 'Новая\nколлекция',
+      subtitle: 'Весенние десерты уже в меню',
+      gradient: [AppColors.primaryLight, AppColors.primary],
+    ),
+    _BannerData(
+      title: 'Бонусы x2',
+      subtitle: 'За каждый заказ в выходные',
+      gradient: [AppColors.secondaryLight, AppColors.primaryLight],
+    ),
+  ];
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return SizedBox(
       height: 160,
       child: PageView.builder(
-        itemCount: banners.length,
-        controller: PageController(viewportFraction: 0.9),
+        itemCount: _banners.length,
+        controller: _controller,
         itemBuilder: (context, index) {
-          final banner = banners[index];
+          final banner = _banners[index];
           return Container(
             margin: const EdgeInsets.symmetric(horizontal: 6),
             padding: const EdgeInsets.all(20),
@@ -42,52 +58,39 @@ class PromoBanner extends StatelessWidget {
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.3),
-                width: 1,
-              ),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.glassShadow,
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
+                  color: AppColors.primary.withValues(alpha: 0.18),
+                  blurRadius: 20,
+                  spreadRadius: -6,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
-            child: Stack(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      banner.title,
-                      style: GoogleFonts.playfairDisplay(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        banner.subtitle,
-                        style: GoogleFonts.nunito(
-                          fontSize: 13,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
+                Text(
+                  banner.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.heading2.copyWith(
+                    color: Colors.white,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                LiquidGlass.capsule(
+                  style: GlassStyle.clear,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Text(
+                    banner.subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.bodySmall.copyWith(color: Colors.white),
+                  ),
                 ),
               ],
             ),
@@ -103,7 +106,7 @@ class _BannerData {
   final String subtitle;
   final List<Color> gradient;
 
-  _BannerData({
+  const _BannerData({
     required this.title,
     required this.subtitle,
     required this.gradient,

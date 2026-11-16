@@ -4,7 +4,7 @@ export interface User {
   firstName?: string;
   lastName?: string;
   loyaltyPoints: number;
-  role: 'USER' | 'ADMIN';
+  role: 'CLIENT' | 'ADMIN' | 'SUPPORT';
   createdAt: string;
 }
 
@@ -41,12 +41,22 @@ export interface OrderItem {
   imageUrl?: string;
 }
 
-export type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'ready' | 'delivered' | 'cancelled';
+export type OrderStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'preparing'
+  | 'ready'
+  | 'delivering'
+  | 'delivered'
+  | 'cancelled';
 
 export interface Order {
   id: string;
+  orderNumber?: string;
   userId: string;
+  userPhone?: string;
   user?: User;
+  deliveryType?: 'delivery' | 'pickup';
   status: OrderStatus;
   items: OrderItem[];
   totalSum: number;
@@ -72,10 +82,31 @@ export interface Store {
   id: string;
   name: string;
   address: string;
-  phone?: string;
-  lat?: number;
-  lng?: number;
-  workingHours?: string;
+  phone: string;
+  latitude: number;
+  longitude: number;
+  workHours: string;
+}
+
+export type CoffeeSize = 'S' | 'M' | 'L';
+
+export interface PunchCard {
+  id: string;
+  size: CoffeeSize;
+  sizeName: string;
+  currentPunches: number;
+  maxPunches: number;
+  isComplete: boolean;
+}
+
+export interface StaffCustomer {
+  id: string;
+  phone: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  loyaltyPoints: number;
+  level: string;
+  punchCards: PunchCard[];
 }
 
 export interface DashboardStats {

@@ -1,24 +1,33 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../../store/authStore';
+import { AccessDeniedError, useAuthStore } from '../../store/authStore';
 
 const Login: React.FC = () => {
   const [phone, setPhone] = useState('+996');
   const [code, setCode] = useState('');
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [error, setError] = useState('');
-  const { login, isLoading } = useAuthStore();
+  const { login, sendCode, isLoading } = useAuthStore();
   const navigate = useNavigate();
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (phone.length < 12) {
-      setError('Введите корректный номер');
+    if (!/^\+996\d{9}$/.test(phone)) {
+      setError('Введите номер в формате +996XXXXXXXXX');
       return;
     }
-    // For test mode, just go to code step
-    setStep('code');
+    try {
+      await sendCode(phone);
+      setCode('');
+      setStep('code');
+    } catch (err: any) {
+      setError(
+        err?.response?.status === 429
+          ? 'Код уже отправлен, подождите минуту'
+          : 'Не удалось отправить код'
+      );
+    }
   };
 
   const handleVerifyCode = async (e: React.FormEvent) => {
@@ -27,8 +36,15 @@ const Login: React.FC = () => {
     try {
       await login(phone, code);
       navigate('/');
-    } catch {
-      setError('Неверный код');
+    } catch (err: any) {
+      if (err instanceof AccessDeniedError) {
+        setError(err.message);
+      } else if (err?.response?.status === 429) {
+        setError('Слишком много попыток, запросите новый код');
+        setStep('phone');
+      } else {
+        setError('Неверный или просроченный код');
+      }
     }
   };
 
@@ -58,13 +74,11 @@ const Login: React.FC = () => {
               {error && <p className="text-red-500 text-sm">{error}</p>}
               <button
                 type="submit"
-                className="w-full py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary-dark transition-colors"
+                disabled={isLoading}
+                className="w-full py-3 bg-primary text-white rounded-lg font-medium hover:bg-primary-dark disabled:opacity-50 transition-colors"
               >
-                Получить код
+                {isLoading ? 'Отправка...' : 'Получить код'}
               </button>
-              <p className="text-xs text-gray-400 text-center mt-4">
-                Тестовый вход: +996999999999 / 9999
-              </p>
             </form>
           ) : (
             <form onSubmit={handleVerifyCode} className="space-y-4">

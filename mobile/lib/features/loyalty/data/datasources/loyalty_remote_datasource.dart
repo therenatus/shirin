@@ -8,7 +8,6 @@ abstract class LoyaltyRemoteDatasource {
   Future<LoyaltyInfoModel> getLoyaltyInfo();
   Future<List<LoyaltyTransactionModel>> getLoyaltyHistory();
   Future<List<PunchCardModel>> getPunchCards();
-  Future<PunchCardModel> claimFreeCoffee(String size);
 }
 
 class LoyaltyRemoteDatasourceImpl implements LoyaltyRemoteDatasource {
@@ -39,11 +38,5 @@ class LoyaltyRemoteDatasourceImpl implements LoyaltyRemoteDatasource {
     return data
         .map((e) => PunchCardModel.fromJson(e as Map<String, dynamic>))
         .toList();
-  }
-
-  @override
-  Future<PunchCardModel> claimFreeCoffee(String size) async {
-    final response = await _apiClient.post(ApiEndpoints.claimFreeCoffee(size));
-    return PunchCardModel.fromJson(response.data as Map<String, dynamic>);
   }
 }

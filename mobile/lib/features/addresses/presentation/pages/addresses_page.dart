@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/di/injection_container.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 import '../../domain/entities/address.dart';
 import '../../domain/entities/create_address_params.dart';
 import '../bloc/addresses_bloc.dart';
@@ -20,236 +22,97 @@ class AddressesPage extends StatelessWidget {
   }
 }
 
+/// "Мои адреса": address cards on the liquid background, add/edit in a glass
+/// sheet, the add action floating at the bottom as the one prominent button.
+/// Pushed on the root navigator, so there is no tab bar under it.
 class _AddressesPageContent extends StatelessWidget {
   const _AddressesPageContent();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.arrow_back_ios_new_rounded,
-              size: 18,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ),
-        title: Text(
-          'Мои адреса',
-          style: GoogleFonts.nunito(
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            onPressed: () => _showAddAddressSheet(context),
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.purple, AppColors.purpleDark],
+    return BlocConsumer<AddressesBloc, AddressesState>(
+      listener: (context, state) {
+        if (state is AddressesActionSuccess) {
+          showGlassToast(
+            context,
+            state.message,
+            icon: Icons.check_circle_rounded,
+          );
+        } else if (state is AddressesError) {
+          showGlassToast(
+            context,
+            state.message,
+            icon: Icons.error_outline_rounded,
+          );
+        }
+      },
+      builder: (context, state) {
+        final List<Widget> slivers;
+        if (state is AddressesLoading) {
+          slivers = const [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.only(top: 80),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.primary,
+                    strokeWidth: 3,
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.add_rounded,
-                size: 20,
-                color: Colors.white,
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: BlocConsumer<AddressesBloc, AddressesState>(
-        listener: (context, state) {
-          if (state is AddressesActionSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  state.message,
-                  style: GoogleFonts.nunito(fontWeight: FontWeight.w600),
-                ),
-                backgroundColor: AppColors.success,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            );
-          } else if (state is AddressesError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  state.message,
-                  style: GoogleFonts.nunito(fontWeight: FontWeight.w600),
-                ),
-                backgroundColor: AppColors.error,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            );
-          }
-        },
-        builder: (context, state) {
-          if (state is AddressesLoading) {
-            return _buildLoadingState();
-          }
-
+          ];
+        } else {
           List<Address> addresses = [];
           if (state is AddressesLoaded) {
             addresses = state.addresses;
           } else if (state is AddressesActionSuccess) {
             addresses = state.addresses;
           }
+          slivers = addresses.isEmpty
+              ? const [SliverToBoxAdapter(child: _EmptyState())]
+              : [_buildAddressList(context, addresses)];
+        }
 
-          if (addresses.isEmpty) {
-            return _buildEmptyState(context);
-          }
-
-          return _buildAddressList(context, addresses);
-        },
-      ),
-    );
-  }
-
-  Widget _buildLoadingState() {
-    return const Center(
-      child: CircularProgressIndicator(
-        color: AppColors.purple,
-        strokeWidth: 3,
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: AppColors.purpleSoft,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.location_off_rounded,
-                size: 48,
-                color: AppColors.purple,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Нет сохранённых адресов',
-              style: GoogleFonts.nunito(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Добавьте адрес для быстрого оформления заказа',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.nunito(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textLight,
-              ),
-            ),
-            const SizedBox(height: 24),
-            GestureDetector(
-              onTap: () => _showAddAddressSheet(context),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.purple, AppColors.purpleDark],
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.purple.withValues(alpha: 0.3),
-                      blurRadius: 12,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.add_location_alt_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Добавить адрес',
-                      style: GoogleFonts.nunito(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAddressList(BuildContext context, List<Address> addresses) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: addresses.length,
-      itemBuilder: (context, index) {
-        final address = addresses[index];
-        return _AddressCard(
-          address: address,
-          onEdit: () => _showEditAddressSheet(context, address),
-          onDelete: () => _showDeleteConfirmation(context, address),
-          onSetDefault: () {
-            HapticFeedback.lightImpact();
-            context.read<AddressesBloc>().add(SetDefault(address.id));
-          },
+        return GlassPage(
+          title: 'Мои адреса',
+          hasTabBar: false,
+          backgroundIntensity: 0.8,
+          onBack: () => Navigator.of(context).pop(),
+          bottomBar: GlassButton(
+            label: 'Добавить адрес',
+            icon: Icons.add_location_alt_rounded,
+            prominent: true,
+            expanded: true,
+            onTap: () => _showAddAddressSheet(context),
+          ),
+          slivers: slivers,
         );
       },
     );
   }
 
+  Widget _buildAddressList(BuildContext context, List<Address> addresses) {
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      sliver: SliverList.builder(
+        itemCount: addresses.length,
+        itemBuilder: (context, index) {
+          final address = addresses[index];
+          return _AddressCard(
+            address: address,
+            onEdit: () => _showEditAddressSheet(context, address),
+            onMore: () => _showActionsSheet(context, address),
+          );
+        },
+      ),
+    );
+  }
+
   void _showAddAddressSheet(BuildContext context) {
     HapticFeedback.lightImpact();
-    showModalBottomSheet(
+    showGlassSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (_) => BlocProvider.value(
         value: context.read<AddressesBloc>(),
         child: const _AddressFormSheet(),
@@ -259,10 +122,8 @@ class _AddressesPageContent extends StatelessWidget {
 
   void _showEditAddressSheet(BuildContext context, Address address) {
     HapticFeedback.lightImpact();
-    showModalBottomSheet(
+    showGlassSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (_) => BlocProvider.value(
         value: context.read<AddressesBloc>(),
         child: _AddressFormSheet(address: address),
@@ -270,50 +131,163 @@ class _AddressesPageContent extends StatelessWidget {
     );
   }
 
+  /// Action sheet replacing the old popup menu: default / edit / delete.
+  void _showActionsSheet(BuildContext context, Address address) {
+    HapticFeedback.lightImpact();
+    showGlassSheet(
+      context: context,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+              child: Column(
+                children: [
+                  Text(
+                    address.name,
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.heading3,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    address.fullAddress,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            if (!address.isDefault)
+              _SheetAction(
+                icon: Icons.check_circle_outline_rounded,
+                label: 'Сделать адресом по умолчанию',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  HapticFeedback.lightImpact();
+                  context.read<AddressesBloc>().add(SetDefault(address.id));
+                },
+              ),
+            _SheetAction(
+              icon: Icons.edit_rounded,
+              label: 'Редактировать',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _showEditAddressSheet(context, address);
+              },
+            ),
+            _SheetAction(
+              icon: Icons.delete_outline_rounded,
+              label: 'Удалить',
+              destructive: true,
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _showDeleteConfirmation(context, address);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showDeleteConfirmation(BuildContext context, Address address) {
     HapticFeedback.mediumImpact();
-    showDialog(
+    showGlassSheet(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: Text(
-          'Удалить адрес?',
-          style: GoogleFonts.nunito(
-            fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        content: Text(
-          'Адрес "${address.name}" будет удалён без возможности восстановления.',
-          style: GoogleFonts.nunito(
-            color: AppColors.textSecondary,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(
-              'Отмена',
-              style: GoogleFonts.nunito(
-                fontWeight: FontWeight.w600,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppColors.error,
+                  size: 28,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Удалить адрес?',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.heading2,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Адрес "${address.name}" будет удалён без возможности восстановления.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMedium.copyWith(
                 color: AppColors.textSecondary,
               ),
             ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              context.read<AddressesBloc>().add(RemoveAddress(address.id));
-            },
-            child: Text(
-              'Удалить',
-              style: GoogleFonts.nunito(
-                fontWeight: FontWeight.w700,
-                color: AppColors.error,
-              ),
+            const SizedBox(height: 22),
+            _DestructiveButton(
+              label: 'Удалить',
+              onTap: () {
+                Navigator.pop(sheetContext);
+                context.read<AddressesBloc>().add(RemoveAddress(address.id));
+              },
             ),
+            const SizedBox(height: 8),
+            GlassButton(
+              label: 'Отмена',
+              expanded: true,
+              onTap: () => Navigator.pop(sheetContext),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 48, 32, 24),
+      child: Column(
+        children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: const BoxDecoration(
+              color: AppColors.primarySoft,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.location_off_rounded,
+              size: 44,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Нет сохранённых адресов',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.heading3,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Добавьте адрес для быстрого оформления заказа',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodySmall,
           ),
         ],
       ),
@@ -324,236 +298,116 @@ class _AddressesPageContent extends StatelessWidget {
 class _AddressCard extends StatelessWidget {
   final Address address;
   final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final VoidCallback onSetDefault;
+  final VoidCallback onMore;
 
   const _AddressCard({
     required this.address,
     required this.onEdit,
-    required this.onDelete,
-    required this.onSetDefault,
+    required this.onMore,
   });
+
+  IconData get _icon {
+    final name = address.name.toLowerCase();
+    if (name.contains('дом')) return Icons.home_rounded;
+    if (name.contains('работ')) return Icons.work_rounded;
+    return Icons.location_on_rounded;
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return ContentCard(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: address.isDefault
-            ? Border.all(
-                color: AppColors.purple.withValues(alpha: 0.3),
-                width: 2,
-              )
-            : null,
-        boxShadow: [
-          BoxShadow(
-            color: address.isDefault
-                ? AppColors.purple.withValues(alpha: 0.1)
-                : Colors.black.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+      padding: const EdgeInsets.fromLTRB(16, 16, 8, 16),
+      onTap: onEdit,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: address.isDefault
+                  ? AppColors.primary
+                  : AppColors.primarySoft,
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Icon(
+              _icon,
+              color: address.isDefault ? Colors.white : AppColors.primary,
+              size: 22,
+            ),
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onEdit,
-          borderRadius: BorderRadius.circular(18),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: address.isDefault
-                              ? [AppColors.purple, AppColors.purpleDark]
-                              : [AppColors.purpleSoft, AppColors.purpleSoft],
+                    Text(
+                      address.name,
+                      style: AppTextStyles.heading3.copyWith(fontSize: 16),
+                    ),
+                    if (address.isDefault)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
                         ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(
-                        address.name.toLowerCase().contains('дом')
-                            ? Icons.home_rounded
-                            : address.name.toLowerCase().contains('работ')
-                                ? Icons.work_rounded
-                                : Icons.location_on_rounded,
-                        color: address.isDefault
-                            ? Colors.white
-                            : AppColors.purple,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                address.name,
-                                style: GoogleFonts.nunito(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              if (address.isDefault) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.purpleSoft,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    'По умолчанию',
-                                    style: GoogleFonts.nunito(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.purple,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            address.fullAddress,
-                            style: GoogleFonts.nunito(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textSecondary,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuButton<String>(
-                      icon: Icon(
-                        Icons.more_vert_rounded,
-                        color: AppColors.textLight,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      itemBuilder: (context) => [
-                        if (!address.isDefault)
-                          PopupMenuItem(
-                            value: 'default',
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.check_circle_outline_rounded,
-                                  size: 20,
-                                  color: AppColors.purple,
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  'По умолчанию',
-                                  style: GoogleFonts.nunito(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        PopupMenuItem(
-                          value: 'edit',
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.edit_rounded,
-                                size: 20,
-                                color: AppColors.textSecondary,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Редактировать',
-                                style: GoogleFonts.nunito(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                        decoration: BoxDecoration(
+                          color: AppColors.primarySoft,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'По умолчанию',
+                          style: AppTextStyles.caption.copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
                           ),
                         ),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.delete_outline_rounded,
-                                size: 20,
-                                color: AppColors.error,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Удалить',
-                                style: GoogleFonts.nunito(
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.error,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      onSelected: (value) {
-                        switch (value) {
-                          case 'default':
-                            onSetDefault();
-                            break;
-                          case 'edit':
-                            onEdit();
-                            break;
-                          case 'delete':
-                            onDelete();
-                            break;
-                        }
-                      },
-                    ),
+                      ),
                   ],
                 ),
-                if (address.intercom != null && address.intercom!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
+                const SizedBox(height: 4),
+                Text(
+                  address.fullAddress,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.bodySmall,
+                ),
+                if (address.intercom != null &&
+                    address.intercom!.isNotEmpty) ...[
+                  const SizedBox(height: 10),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
+                      horizontal: 10,
+                      vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(10),
+                      color: AppColors.surfaceMuted,
+                      borderRadius: BorderRadius.circular(999),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.dialpad_rounded,
-                          size: 16,
-                          color: AppColors.textLight,
+                          size: 14,
+                          color: AppColors.textSecondary,
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Домофон: ${address.intercom}',
-                          style: GoogleFonts.nunito(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Домофон: ${address.intercom}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.caption.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -563,7 +417,104 @@ class _AddressCard extends StatelessWidget {
               ],
             ),
           ),
+          IconButton(
+            onPressed: onMore,
+            tooltip: 'Действия',
+            icon: const Icon(
+              Icons.more_horiz_rounded,
+              color: AppColors.textLight,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Row in the glass action sheet.
+class _SheetAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool destructive;
+
+  const _SheetAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.destructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = destructive ? AppColors.error : AppColors.textPrimary;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: GlassPressable(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Container(
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 22,
+                color: destructive ? AppColors.error : AppColors.primary,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.bodyLarge.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// Solid red capsule for the destructive confirmation.
+class _DestructiveButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _DestructiveButton({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassPressable(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      glowColor: Colors.white.withValues(alpha: 0.35),
+      child: Container(
+        height: 54,
+        decoration: BoxDecoration(
+          color: AppColors.error,
+          borderRadius: BorderRadius.circular(999),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.error.withValues(alpha: 0.28),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: Text(label, style: AppTextStyles.button),
       ),
     );
   }
@@ -613,6 +564,11 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
     super.dispose();
   }
 
+  String? _optional(TextEditingController c) {
+    final v = c.text.trim();
+    return v.isEmpty ? null : v;
+  }
+
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
 
@@ -625,18 +581,10 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
               UpdateAddressParams(
                 name: _nameController.text.trim(),
                 street: _streetController.text.trim(),
-                apartment: _apartmentController.text.trim().isEmpty
-                    ? null
-                    : _apartmentController.text.trim(),
-                entrance: _entranceController.text.trim().isEmpty
-                    ? null
-                    : _entranceController.text.trim(),
-                floor: _floorController.text.trim().isEmpty
-                    ? null
-                    : _floorController.text.trim(),
-                intercom: _intercomController.text.trim().isEmpty
-                    ? null
-                    : _intercomController.text.trim(),
+                apartment: _optional(_apartmentController),
+                entrance: _optional(_entranceController),
+                floor: _optional(_floorController),
+                intercom: _optional(_intercomController),
               ),
             ),
           );
@@ -646,18 +594,10 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
               CreateAddressParams(
                 name: _nameController.text.trim(),
                 street: _streetController.text.trim(),
-                apartment: _apartmentController.text.trim().isEmpty
-                    ? null
-                    : _apartmentController.text.trim(),
-                entrance: _entranceController.text.trim().isEmpty
-                    ? null
-                    : _entranceController.text.trim(),
-                floor: _floorController.text.trim().isEmpty
-                    ? null
-                    : _floorController.text.trim(),
-                intercom: _intercomController.text.trim().isEmpty
-                    ? null
-                    : _intercomController.text.trim(),
+                apartment: _optional(_apartmentController),
+                entrance: _optional(_entranceController),
+                floor: _optional(_floorController),
+                intercom: _optional(_intercomController),
                 isDefault: _isDefault,
               ),
             ),
@@ -669,378 +609,176 @@ class _AddressFormSheetState extends State<_AddressFormSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
+    final mq = MediaQuery.of(context);
+    // Keep the sheet below the status bar even with the keyboard open.
+    final maxHeight =
+        mq.size.height - mq.padding.top - mq.viewInsets.bottom - 48;
+    final name = _nameController.text;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight.clamp(200.0, 2000.0)),
       child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Handle
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.divider,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Title
-                Text(
-                  _isEditing ? 'Редактировать адрес' : 'Новый адрес',
-                  style: GoogleFonts.nunito(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Quick select name
-                Text(
-                  'Название',
-                  style: GoogleFonts.nunito(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _QuickNameChip(
-                      label: 'Дом',
-                      icon: Icons.home_rounded,
-                      isSelected: _nameController.text == 'Дом',
-                      onTap: () => setState(() => _nameController.text = 'Дом'),
-                    ),
-                    const SizedBox(width: 8),
-                    _QuickNameChip(
-                      label: 'Работа',
-                      icon: Icons.work_rounded,
-                      isSelected: _nameController.text == 'Работа',
-                      onTap: () => setState(() => _nameController.text = 'Работа'),
-                    ),
-                    const SizedBox(width: 8),
-                    _QuickNameChip(
-                      label: 'Другое',
-                      icon: Icons.location_on_rounded,
-                      isSelected: _nameController.text != 'Дом' &&
-                          _nameController.text != 'Работа' &&
-                          _nameController.text.isNotEmpty,
-                      onTap: () => setState(() => _nameController.text = ''),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _buildTextField(
-                  controller: _nameController,
-                  hint: 'Например: Дом, Работа',
-                  validator: (v) => v!.isEmpty ? 'Введите название' : null,
-                ),
-                const SizedBox(height: 16),
-
-                // Street
-                Text(
-                  'Улица и дом',
-                  style: GoogleFonts.nunito(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _buildTextField(
-                  controller: _streetController,
-                  hint: 'ул. Киевская, 120',
-                  validator: (v) => v!.isEmpty ? 'Введите адрес' : null,
-                ),
-                const SizedBox(height: 16),
-
-                // Apartment details
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Квартира',
-                            style: GoogleFonts.nunito(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          _buildTextField(
-                            controller: _apartmentController,
-                            hint: '45',
-                            keyboardType: TextInputType.number,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Подъезд',
-                            style: GoogleFonts.nunito(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          _buildTextField(
-                            controller: _entranceController,
-                            hint: '2',
-                            keyboardType: TextInputType.number,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Этаж',
-                            style: GoogleFonts.nunito(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          _buildTextField(
-                            controller: _floorController,
-                            hint: '5',
-                            keyboardType: TextInputType.number,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Домофон',
-                            style: GoogleFonts.nunito(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          _buildTextField(
-                            controller: _intercomController,
-                            hint: '45K1234',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Default switch
-                if (!_isEditing)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.star_rounded,
-                          color: _isDefault ? AppColors.warning : AppColors.textLight,
-                          size: 22,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Адрес по умолчанию',
-                            style: GoogleFonts.nunito(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        Switch.adaptive(
-                          value: _isDefault,
-                          onChanged: (v) => setState(() => _isDefault = v),
-                          activeTrackColor: AppColors.purple.withValues(alpha: 0.5),
-                          thumbColor: WidgetStateProperty.resolveWith((states) =>
-                            states.contains(WidgetState.selected) ? AppColors.purple : Colors.white
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 24),
-
-                // Submit button
-                SizedBox(
-                  width: double.infinity,
-                  child: GestureDetector(
-                    onTap: _submit,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppColors.purple, AppColors.purpleDark],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.purple.withValues(alpha: 0.3),
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          _isEditing ? 'Сохранить' : 'Добавить адрес',
-                          style: GoogleFonts.nunito(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String hint,
-    String? Function(String?)? validator,
-    TextInputType? keyboardType,
-  }) {
-    return TextFormField(
-      controller: controller,
-      validator: validator,
-      keyboardType: keyboardType,
-      style: GoogleFonts.nunito(
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
-      ),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: GoogleFonts.nunito(
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-          color: AppColors.textLight,
-        ),
-        filled: true,
-        fillColor: AppColors.background,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.purple, width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: AppColors.error, width: 2),
-        ),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 14,
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickNameChip extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _QuickNameChip({
-    required this.label,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.purpleSoft : AppColors.background,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? AppColors.purple : Colors.transparent,
-            width: 1.5,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isSelected ? AppColors.purple : AppColors.textLight,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: GoogleFonts.nunito(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isSelected ? AppColors.purple : AppColors.textSecondary,
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _isEditing ? 'Редактировать адрес' : 'Новый адрес',
+                style: AppTextStyles.heading2,
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+
+              // Quick select name
+              Padding(
+                padding: const EdgeInsets.only(left: 6, bottom: 8),
+                child: Text('Название', style: AppTextStyles.label),
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  GlassChip(
+                    label: 'Дом',
+                    icon: Icons.home_rounded,
+                    selected: name == 'Дом',
+                    onTap: () => setState(() => _nameController.text = 'Дом'),
+                  ),
+                  GlassChip(
+                    label: 'Работа',
+                    icon: Icons.work_rounded,
+                    selected: name == 'Работа',
+                    onTap: () =>
+                        setState(() => _nameController.text = 'Работа'),
+                  ),
+                  GlassChip(
+                    label: 'Другое',
+                    icon: Icons.location_on_rounded,
+                    selected:
+                        name != 'Дом' && name != 'Работа' && name.isNotEmpty,
+                    onTap: () => setState(() => _nameController.text = ''),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              GlassTextField(
+                controller: _nameController,
+                hint: 'Например: Дом, Работа',
+                textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.next,
+                onChanged: (_) => setState(() {}),
+                validator: (v) => v!.isEmpty ? 'Введите название' : null,
+              ),
+              const SizedBox(height: 16),
+
+              GlassTextField(
+                controller: _streetController,
+                label: 'Улица и дом',
+                hint: 'ул. Киевская, 120',
+                icon: Icons.location_on_outlined,
+                textInputAction: TextInputAction.next,
+                validator: (v) => v!.isEmpty ? 'Введите адрес' : null,
+              ),
+              const SizedBox(height: 16),
+
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: GlassTextField(
+                      controller: _apartmentController,
+                      label: 'Квартира',
+                      hint: '45',
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GlassTextField(
+                      controller: _entranceController,
+                      label: 'Подъезд',
+                      hint: '2',
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: GlassTextField(
+                      controller: _floorController,
+                      label: 'Этаж',
+                      hint: '5',
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: GlassTextField(
+                      controller: _intercomController,
+                      label: 'Домофон',
+                      hint: '45K1234',
+                      textInputAction: TextInputAction.done,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Default switch
+              if (!_isEditing)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 10, 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.star_rounded,
+                        color: _isDefault
+                            ? AppColors.warning
+                            : AppColors.textLight,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Адрес по умолчанию',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      Switch.adaptive(
+                        value: _isDefault,
+                        onChanged: (v) => setState(() => _isDefault = v),
+                        activeTrackColor: AppColors.primary,
+                        thumbColor: WidgetStateProperty.all(Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 24),
+
+              GlassButton(
+                label: _isEditing ? 'Сохранить' : 'Добавить адрес',
+                prominent: true,
+                expanded: true,
+                onTap: _submit,
+              ),
+            ],
+          ),
         ),
       ),
     );

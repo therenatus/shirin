@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_text_styles.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
+import '../../../../shared/widgets/ui_kit.dart';
 import '../bloc/cart_bloc.dart';
 import '../bloc/cart_event.dart';
 import '../bloc/cart_state.dart';
 import '../widgets/cart_item_card.dart';
 
+/// Cart: lines on content cards, promo code, totals, and one prominent
+/// checkout button floating above the tab bar.
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
 
@@ -16,8 +20,10 @@ class CartPage extends StatefulWidget {
 }
 
 class _CartPageState extends State<CartPage> {
-  final TextEditingController _promoController = TextEditingController();
+  final _promoController = TextEditingController();
   bool _promoApplied = false;
+
+  static const double _promoDiscount = 50;
 
   @override
   void dispose() {
@@ -27,515 +33,124 @@ class _CartPageState extends State<CartPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: BlocBuilder<CartBloc, CartState>(
-        builder: (context, state) {
-          if (state is CartLoaded) {
-            if (state.isEmpty) {
-              return _buildEmptyCart();
-            }
-            return _buildCartContent(state);
-          }
-          return const SizedBox.shrink();
-        },
-      ),
+    return BlocBuilder<CartBloc, CartState>(
+      builder: (context, state) {
+        if (state is! CartLoaded) {
+          return const GlassPage(title: 'Корзина', showBack: false, slivers: []);
+        }
+        if (state.isEmpty) {
+          return GlassPage(
+            title: 'Корзина',
+            showBack: false,
+            slivers: [
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _EmptyCart(onBrowse: () => context.go('/catalog')),
+              ),
+            ],
+          );
+        }
+        return _buildContent(state);
+      },
     );
   }
 
-  Widget _buildCartContent(CartLoaded state) {
-    return Column(
-      children: [
-        // Header
-        _buildHeader(state),
+  Widget _buildContent(CartLoaded state) {
+    final discount = _promoApplied ? _promoDiscount : 0;
+    final total = (state.totalSum - discount).clamp(0, double.infinity);
 
-        // Cart Items
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+    return GlassPage(
+      title: 'Корзина',
+      eyebrow: '${state.totalItems} ${_plural(state.totalItems)}',
+      showBack: false,
+      actions: [
+        GlassIconButton(
+          icon: Icons.delete_sweep_outlined,
+          tooltip: 'Очистить',
+          onTap: () => _confirmClear(context),
+        ),
+      ],
+      bottomBar: GlassButton(
+        label: 'Оформить заказ',
+        trailing: formatPrice(total),
+        prominent: true,
+        expanded: true,
+        onTap: () => showGlassToast(
+          context,
+          'Оформление заказа появится в следующем обновлении',
+          icon: Icons.info_outline_rounded,
+        ),
+      ),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: SliverList.separated(
             itemCount: state.items.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final item = state.items[index];
               return CartItemCard(
                 item: item,
-                onQuantityChanged: (quantity) {
-                  context.read<CartBloc>().add(UpdateQuantity(
-                        productId: item.product.id,
-                        quantity: quantity,
-                      ));
-                },
-                onRemove: () {
-                  context.read<CartBloc>().add(RemoveFromCart(item.product.id));
-                },
+                onQuantityChanged: (q) => context.read<CartBloc>().add(
+                      UpdateQuantity(productId: item.product.id, quantity: q),
+                    ),
+                onRemove: () =>
+                    context.read<CartBloc>().add(RemoveFromCart(item.product.id)),
               );
             },
           ),
         ),
-
-        // Bottom Section
-        _buildBottomSection(state),
-      ],
-    );
-  }
-
-  Widget _buildHeader(CartLoaded state) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        MediaQuery.of(context).padding.top + 16,
-        20,
-        16,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Корзина',
-                  style: GoogleFonts.nunito(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${state.totalItems} ${_getItemsText(state.totalItems)}',
-                  style: GoogleFonts.nunito(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Clear button
-          GestureDetector(
-            onTap: () => _showClearConfirmation(context),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.delete_outline_rounded,
-                    size: 18,
-                    color: AppColors.error,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Очистить',
-                    style: GoogleFonts.nunito(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.error,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomSection(CartLoaded state) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        20,
-        20,
-        MediaQuery.of(context).padding.bottom + 20,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Promo code input
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: [
-                const SizedBox(width: 12),
-                Icon(
-                  Icons.local_offer_outlined,
-                  size: 20,
-                  color: AppColors.textLight,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: _promoController,
-                    style: GoogleFonts.nunito(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Промокод',
-                      hintStyle: GoogleFonts.nunito(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textLight,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                      isDense: true,
-                    ),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    if (_promoController.text.isNotEmpty) {
-                      setState(() => _promoApplied = true);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Промокод применен!',
-                            style: GoogleFonts.nunito(fontWeight: FontWeight.w600),
-                          ),
-                          backgroundColor: AppColors.success,
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                      );
-                    }
+                _PromoField(
+                  controller: _promoController,
+                  applied: _promoApplied,
+                  onApply: () {
+                    if (_promoController.text.trim().isEmpty) return;
+                    setState(() => _promoApplied = true);
+                    FocusScope.of(context).unfocus();
                   },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.purple,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Применить',
-                      style: GoogleFonts.nunito(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
+                  onReset: () => setState(() {
+                    _promoApplied = false;
+                    _promoController.clear();
+                  }),
+                ),
+                const SizedBox(height: 16),
+                _SummaryCard(
+                  rows: [
+                    ('Товары', formatPrice(state.totalSum), null),
+                    ('Доставка', 'Бесплатно', AppColors.success),
+                    if (_promoApplied)
+                      ('Промокод', '-${formatPrice(_promoDiscount)}', AppColors.primary),
+                  ],
+                  total: formatPrice(total),
                 ),
               ],
             ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Price breakdown
-          _buildPriceRow('Подитог', '${state.totalSum.toInt()} сом'),
-          const SizedBox(height: 8),
-          _buildPriceRow('Доставка', 'Бесплатно', isGreen: true),
-          if (_promoApplied) ...[
-            const SizedBox(height: 8),
-            _buildPriceRow('Скидка', '-50 сом', isDiscount: true),
-          ],
-
-          const SizedBox(height: 16),
-
-          // Divider
-          Container(
-            height: 1,
-            color: AppColors.divider,
-          ),
-
-          const SizedBox(height: 16),
-
-          // Total
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Итого',
-                style: GoogleFonts.nunito(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              Text(
-                '${_promoApplied ? (state.totalSum - 50).toInt() : state.totalSum.toInt()} сом',
-                style: GoogleFonts.nunito(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-
-          // Checkout button
-          GestureDetector(
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Оформление заказа — скоро!',
-                    style: GoogleFonts.nunito(fontWeight: FontWeight.w600),
-                  ),
-                  backgroundColor: AppColors.purple,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              );
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.purple, AppColors.primary],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.purple.withValues(alpha: 0.35),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Оформить заказ',
-                    style: GoogleFonts.nunito(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Icon(
-                    Icons.arrow_forward_rounded,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPriceRow(String label, String value, {bool isGreen = false, bool isDiscount = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.nunito(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppColors.textSecondary,
-          ),
-        ),
-        Text(
-          value,
-          style: GoogleFonts.nunito(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isGreen
-                ? AppColors.success
-                : isDiscount
-                    ? AppColors.error
-                    : AppColors.textPrimary,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildEmptyCart() {
-    return SafeArea(
-      child: Column(
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            child: Row(
-              children: [
-                Text(
-                  'Корзина',
-                  style: GoogleFonts.nunito(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Empty state
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: AppColors.purple.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.shopping_bag_outlined,
-                      size: 56,
-                      color: AppColors.purple.withValues(alpha: 0.5),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Корзина пуста',
-                    style: GoogleFonts.nunito(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 48),
-                    child: Text(
-                      'Добавьте что-нибудь вкусное из нашего каталога',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.nunito(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textSecondary,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  GestureDetector(
-                    onTap: () => context.go('/catalog'),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppColors.purple, AppColors.primary],
-                        ),
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.purple.withValues(alpha: 0.3),
-                            blurRadius: 15,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.shopping_basket_rounded,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Перейти в каталог',
-                            style: GoogleFonts.nunito(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getItemsText(int count) {
-    if (count == 1) return 'товар';
-    if (count >= 2 && count <= 4) return 'товара';
+  String _plural(int n) {
+    final r10 = n % 10, r100 = n % 100;
+    if (r10 == 1 && r100 != 11) return 'товар';
+    if (r10 >= 2 && r10 <= 4 && (r100 < 12 || r100 > 14)) return 'товара';
     return 'товаров';
   }
 
-  void _showClearConfirmation(BuildContext context) {
-    showModalBottomSheet(
+  void _confirmClear(BuildContext context) {
+    showGlassSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: EdgeInsets.fromLTRB(
-          20,
-          24,
-          20,
-          MediaQuery.of(ctx).padding.bottom + 20,
-        ),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.divider,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
             Container(
               width: 64,
               height: 64,
@@ -543,82 +158,206 @@ class _CartPageState extends State<CartPage> {
                 color: AppColors.error.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(
-                Icons.delete_outline_rounded,
-                size: 32,
-                color: AppColors.error,
-              ),
+              child: const Icon(Icons.delete_outline_rounded,
+                  size: 30, color: AppColors.error),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            Text('Очистить корзину?', style: AppTextStyles.heading2),
+            const SizedBox(height: 6),
             Text(
-              'Очистить корзину?',
-              style: GoogleFonts.nunito(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Все товары будут удалены из корзины',
-              style: GoogleFonts.nunito(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textSecondary,
-              ),
+              'Все товары будут удалены.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodySmall,
             ),
             const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
-                  child: GestureDetector(
+                  child: GlassButton(
+                    label: 'Отмена',
+                    expanded: true,
                     onTap: () => Navigator.pop(ctx),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: AppColors.background,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Отмена',
-                          style: GoogleFonts.nunito(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: GestureDetector(
+                  child: LiquidGlass.capsule(
+                    height: 54,
+                    style: GlassStyle.regular.copyWith(
+                      tint: AppColors.error.withValues(alpha: 0.9),
+                      shadowColor: AppColors.error,
+                      foreground: Colors.white,
+                    ),
                     onTap: () {
                       context.read<CartBloc>().add(const ClearCart());
                       Navigator.pop(ctx);
                     },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: AppColors.error,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Очистить',
-                          style: GoogleFonts.nunito(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
+                    child: Center(
+                      child: Text('Очистить', style: AppTextStyles.button),
                     ),
                   ),
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PromoField extends StatelessWidget {
+  final TextEditingController controller;
+  final bool applied;
+  final VoidCallback onApply;
+  final VoidCallback onReset;
+
+  const _PromoField({
+    required this.controller,
+    required this.applied,
+    required this.onApply,
+    required this.onReset,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LiquidGlass.capsule(
+      height: 54,
+      padding: const EdgeInsets.only(left: 18, right: 6),
+      style: applied
+          ? GlassStyle.regular.copyWith(
+              tint: AppColors.primaryTint.withValues(alpha: 0.85),
+              shadowOpacity: 0.06,
+            )
+          : GlassStyle.regular.copyWith(shadowOpacity: 0.06),
+      child: Row(
+        children: [
+          Icon(
+            applied ? Icons.check_circle_rounded : Icons.local_offer_outlined,
+            size: 20,
+            color: applied ? AppColors.primary : AppColors.textSecondary,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              enabled: !applied,
+              textCapitalization: TextCapitalization.characters,
+              style: AppTextStyles.label,
+              cursorColor: AppColors.primary,
+              onSubmitted: (_) => onApply(),
+              decoration: const InputDecoration(
+                hintText: 'Промокод',
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                isDense: true,
+              ),
+            ),
+          ),
+          LiquidGlass.capsule(
+            height: 42,
+            shadow: false,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            style: const GlassStyle(
+              blur: 4,
+              tint: Color(0xE6FFFFFF),
+              shadowOpacity: 0,
+            ),
+            onTap: applied ? onReset : onApply,
+            child: Center(
+              widthFactor: 1,
+              child: Text(
+                applied ? 'Убрать' : 'Применить',
+                style: AppTextStyles.label.copyWith(color: AppColors.primary),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryCard extends StatelessWidget {
+  final List<(String, String, Color?)> rows;
+  final String total;
+
+  const _SummaryCard({required this.rows, required this.total});
+
+  @override
+  Widget build(BuildContext context) {
+    return ContentCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          for (final (label, value, color) in rows) ...[
+            Row(
+              children: [
+                Expanded(child: Text(label, style: AppTextStyles.bodySmall)),
+                Text(
+                  value,
+                  style: AppTextStyles.price.copyWith(
+                    fontSize: 14,
+                    color: color ?? AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
+          const Divider(height: 1, color: AppColors.divider),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(child: Text('Итого', style: AppTextStyles.heading3)),
+              Text(total, style: AppTextStyles.heading2),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyCart extends StatelessWidget {
+  final VoidCallback onBrowse;
+  const _EmptyCart({required this.onBrowse});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            LiquidGlass(
+              width: 120,
+              height: 120,
+              borderRadius: BorderRadius.circular(60),
+              child: const Center(
+                child: Icon(Icons.shopping_bag_outlined,
+                    size: 50, color: AppColors.primary),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text('Пока пусто', style: AppTextStyles.heading2),
+            const SizedBox(height: 8),
+            Text(
+              'Наполеон, эклеры или латте? Загляните в меню.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodySmall,
+            ),
+            const SizedBox(height: 24),
+            GlassButton(
+              label: 'Открыть меню',
+              icon: Icons.menu_book_rounded,
+              prominent: true,
+              onTap: onBrowse,
             ),
           ],
         ),

@@ -17,15 +17,21 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     required VerifyCode verifyCode,
     required GetCurrentUser getCurrentUser,
     required Logout logout,
-  })  : _sendCode = sendCode,
-        _verifyCode = verifyCode,
-        _getCurrentUser = getCurrentUser,
-        _logout = logout,
-        super(const AuthInitial()) {
+  }) : _sendCode = sendCode,
+       _verifyCode = verifyCode,
+       _getCurrentUser = getCurrentUser,
+       _logout = logout,
+       super(const AuthInitial()) {
     on<CheckAuthStatus>(_onCheckAuthStatus);
     on<SendCodeRequested>(_onSendCodeRequested);
     on<VerifyCodeRequested>(_onVerifyCodeRequested);
     on<LogoutRequested>(_onLogoutRequested);
+    on<UserRefreshed>(_onUserRefreshed);
+  }
+
+  /// The profile was updated elsewhere (e.g. the edit sheet); publish it.
+  void _onUserRefreshed(UserRefreshed event, Emitter<AuthState> emit) {
+    emit(Authenticated(event.user));
   }
 
   Future<void> _onCheckAuthStatus(

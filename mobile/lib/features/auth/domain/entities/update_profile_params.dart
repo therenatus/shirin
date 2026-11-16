@@ -18,7 +18,8 @@ class UpdateProfileParams extends Equatable {
     if (firstName != null) json['firstName'] = firstName;
     if (lastName != null) json['lastName'] = lastName;
     if (email != null) json['email'] = email;
-    if (birthDate != null) json['birthDate'] = birthDate!.toIso8601String().split('T').first;
+    if (birthDate != null)
+      json['birthDate'] = birthDate!.toIso8601String().split('T').first;
     return json;
   }
 

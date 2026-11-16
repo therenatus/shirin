@@ -1,89 +1,136 @@
 import 'package:flutter/material.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 import '../../domain/entities/store.dart';
+import 'store_status.dart';
 
+/// Store row on a solid [ContentCard]: icon tile, name, address, open/closed
+/// status, working hours and (optionally) the distance from the user.
 class StoreCard extends StatelessWidget {
   final Store store;
   final VoidCallback onTap;
 
-  const StoreCard({super.key, required this.store, required this.onTap});
+  /// Pre-formatted distance, e.g. "850 м". Hidden when null/empty.
+  final String? distance;
+
+  const StoreCard({
+    super.key,
+    required this.store,
+    required this.onTap,
+    this.distance,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    final status = StoreStatus.fromHours(store.workingHours);
+    return ContentCard(
+      margin: const EdgeInsets.only(bottom: 12),
       onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.glassFill,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.glassBorder, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.glassShadow,
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.secondaryBackground,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(
-                Icons.store,
-                color: AppColors.primary,
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    store.name,
-                    style: AppTextStyles.bodyLarge.copyWith(
-                      fontWeight: FontWeight.w600,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const StoreIconTile(),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        store.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.heading3.copyWith(fontSize: 16),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    store.address,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  if (store.workingHours != null) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        const Icon(Icons.access_time,
-                            size: 12, color: AppColors.textSecondary),
-                        const SizedBox(width: 4),
-                        Text(
-                          store.workingHours!,
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
+                    if (distance != null && distance!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      StoreDistancePill(distance: distance!),
+                    ],
                   ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  store.address,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.bodySmall,
+                ),
+                if (status != null || store.workingHours != null) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      if (status != null) StoreStatusPill(status: status),
+                      if (store.workingHours != null)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.schedule_rounded,
+                              size: 14,
+                              color: AppColors.textLight,
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                store.workingHours!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.caption,
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
                 ],
-              ),
+              ],
             ),
-            const Icon(Icons.chevron_right,
-                color: AppColors.textSecondary, size: 20),
-          ],
-        ),
+          ),
+          const SizedBox(width: 4),
+          const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textLight,
+              size: 22,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Rounded pastel tile with a storefront icon.
+class StoreIconTile extends StatelessWidget {
+  final double size;
+  final bool selected;
+
+  const StoreIconTile({super.key, this.size = 48, this.selected = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: selected ? AppColors.primary : AppColors.primarySoft,
+        borderRadius: BorderRadius.circular(size / 3),
+      ),
+      child: Icon(
+        Icons.storefront_rounded,
+        color: selected ? Colors.white : AppColors.primary,
+        size: size / 2,
       ),
     );
   }

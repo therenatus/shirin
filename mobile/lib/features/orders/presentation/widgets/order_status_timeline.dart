@@ -1,153 +1,184 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 import '../../domain/entities/order.dart';
+import 'order_status_style.dart';
 
+/// Glass status header for the order details screen: the current status
+/// large, its description, and a horizontal progress track of all steps.
+/// A cancelled order shows a single cancelled state instead of the track.
 class OrderStatusTimeline extends StatelessWidget {
   final OrderStatus currentStatus;
 
   const OrderStatusTimeline({super.key, required this.currentStatus});
 
+  static const _steps = [
+    OrderStatus.pending,
+    OrderStatus.confirmed,
+    OrderStatus.preparing,
+    OrderStatus.ready,
+    OrderStatus.delivered,
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final statuses = [
-      OrderStatus.pending,
-      OrderStatus.confirmed,
-      OrderStatus.preparing,
-      OrderStatus.ready,
-      OrderStatus.delivered,
-    ];
-
     final isCancelled = currentStatus == OrderStatus.cancelled;
+    final c = currentStatus.color;
 
-    return Column(
-      children: [
-        if (isCancelled)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppColors.error.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.cancel, color: AppColors.error, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  'Заказ отменён',
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.error,
-                    fontWeight: FontWeight.w600,
-                  ),
+    return GlassCard(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: c.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
                 ),
-              ],
-            ),
-          )
-        else
-          ...List.generate(statuses.length, (index) {
-            final status = statuses[index];
-            final isCompleted =
-                statuses.indexOf(currentStatus) >= index;
-            final isLast = index == statuses.length - 1;
-
-            return _buildTimelineItem(
-              label: _getStatusLabel(status),
-              icon: _getStatusIcon(status),
-              isCompleted: isCompleted,
-              isLast: isLast,
-            );
-          }),
-      ],
+                child: Icon(currentStatus.icon, color: c, size: 26),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'СТАТУС ЗАКАЗА',
+                      style: AppTextStyles.overline,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isCancelled ? 'Заказ отменён' : currentStatus.label,
+                      style: AppTextStyles.heading2.copyWith(
+                        color: isCancelled ? AppColors.error : AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isCancelled
+                          ? 'Если у вас есть вопросы, свяжитесь с поддержкой'
+                          : currentStatus.description,
+                      style: AppTextStyles.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (!isCancelled) ...[
+            const SizedBox(height: 20),
+            _Track(current: _steps.indexOf(currentStatus)),
+          ],
+        ],
+      ),
     );
   }
+}
 
-  Widget _buildTimelineItem({
-    required String label,
-    required IconData icon,
-    required bool isCompleted,
-    required bool isLast,
-  }) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+class _Track extends StatelessWidget {
+  final int current;
+  const _Track({required this.current});
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = OrderStatusTimeline._steps;
+    return Column(
       children: [
-        Column(
+        // Dots joined by segments.
+        Row(
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isCompleted ? AppColors.primary : AppColors.divider,
-                boxShadow: isCompleted
-                    ? [
-                        BoxShadow(
-                          color: AppColors.primary.withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          spreadRadius: 1,
-                        ),
-                      ]
-                    : null,
+            for (var i = 0; i < steps.length; i++) ...[
+              _Dot(
+                icon: steps[i].icon,
+                done: i <= current,
+                isCurrent: i == current,
               ),
-              child: Icon(
-                icon,
-                size: 16,
-                color: isCompleted ? Colors.white : AppColors.textSecondary,
-              ),
-            ),
-            if (!isLast)
-              Container(
-                width: 2,
-                height: 24,
-                color: isCompleted ? AppColors.primary : AppColors.divider,
+              if (i < steps.length - 1)
+                Expanded(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 350),
+                    height: 3,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: i < current
+                          ? AppColors.primary
+                          : AppColors.textLight.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (var i = 0; i < steps.length; i++)
+              Expanded(
+                child: Text(
+                  steps[i].label,
+                  textAlign: i == 0
+                      ? TextAlign.left
+                      : i == steps.length - 1
+                          ? TextAlign.right
+                          : TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  style: AppTextStyles.caption.copyWith(
+                    fontSize: 11,
+                    fontWeight: i == current ? FontWeight.w800 : FontWeight.w600,
+                    color: i <= current ? AppColors.textPrimary : AppColors.textLight,
+                  ),
+                ),
               ),
           ],
         ),
-        const SizedBox(width: 12),
-        Padding(
-          padding: const EdgeInsets.only(top: 6),
-          child: Text(
-            label,
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: isCompleted ? AppColors.textPrimary : AppColors.textSecondary,
-              fontWeight: isCompleted ? FontWeight.w600 : FontWeight.normal,
-            ),
-          ),
-        ),
       ],
     );
   }
+}
 
-  String _getStatusLabel(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pending:
-        return 'Ожидает подтверждения';
-      case OrderStatus.confirmed:
-        return 'Подтверждён';
-      case OrderStatus.preparing:
-        return 'Готовится';
-      case OrderStatus.ready:
-        return 'Готов к выдаче';
-      case OrderStatus.delivered:
-        return 'Доставлен';
-      case OrderStatus.cancelled:
-        return 'Отменён';
-    }
-  }
+class _Dot extends StatelessWidget {
+  final IconData icon;
+  final bool done;
+  final bool isCurrent;
 
-  IconData _getStatusIcon(OrderStatus status) {
-    switch (status) {
-      case OrderStatus.pending:
-        return Icons.access_time;
-      case OrderStatus.confirmed:
-        return Icons.check_circle_outline;
-      case OrderStatus.preparing:
-        return Icons.restaurant;
-      case OrderStatus.ready:
-        return Icons.inventory_2_outlined;
-      case OrderStatus.delivered:
-        return Icons.done_all;
-      case OrderStatus.cancelled:
-        return Icons.cancel_outlined;
-    }
+  const _Dot({required this.icon, required this.done, required this.isCurrent});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutBack,
+      width: isCurrent ? 34 : 28,
+      height: isCurrent ? 34 : 28,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: done ? AppColors.primary : Colors.white.withValues(alpha: 0.7),
+        border: done
+            ? null
+            : Border.all(color: AppColors.textLight.withValues(alpha: 0.35), width: 1.5),
+        boxShadow: isCurrent
+            ? [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.35),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: Icon(
+        done && !isCurrent ? Icons.check_rounded : icon,
+        size: isCurrent ? 18 : 15,
+        color: done ? Colors.white : AppColors.textLight,
+      ),
+    );
   }
 }

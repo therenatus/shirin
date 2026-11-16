@@ -2,8 +2,9 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsString,
   IsOptional,
-  IsNumber,
   IsArray,
+  IsInt,
+  ArrayMinSize,
   IsUUID,
   IsEnum,
   ValidateNested,
@@ -23,7 +24,7 @@ export class OrderItemDto {
   productId: string;
 
   @ApiProperty({ description: 'Quantity', minimum: 1 })
-  @IsNumber()
+  @IsInt()
   @Min(1)
   quantity: number;
 }
@@ -31,6 +32,7 @@ export class OrderItemDto {
 export class CreateOrderDto {
   @ApiProperty({ type: [OrderItemDto], description: 'Order items' })
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => OrderItemDto)
   items: OrderItemDto[];
@@ -60,7 +62,7 @@ export class CreateOrderDto {
   comment?: string;
 
   @ApiPropertyOptional({ description: 'Loyalty points to use' })
-  @IsNumber()
+  @IsInt()
   @Min(0)
   @IsOptional()
   pointsToUse?: number;

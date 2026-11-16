@@ -1,8 +1,11 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import '../../core/constants/app_colors.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../core/constants/app_text_styles.dart';
+import 'liquid_glass/liquid_glass_kit.dart';
+
+/// Legacy app bar API on top of the Liquid Glass top bar.
+/// New screens should use [GlassPage], which also handles large titles.
 class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? title;
   final Widget? titleWidget;
@@ -22,48 +25,51 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(GlassTopBar.barHeight);
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.glassFill,
-            border: showBorder
-                ? Border(
-                    bottom: BorderSide(
-                      color: AppColors.glassBorder,
-                      width: 1,
+    final canPop = Navigator.of(context).canPop() || GoRouter.of(context).canPop();
+    final lead = leading ??
+        (canPop
+            ? GlassIconButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                iconSize: 19,
+                tooltip: 'Назад',
+                onTap: () => context.pop(),
+              )
+            : null);
+    if (titleWidget != null) {
+      return SafeArea(
+        bottom: false,
+        child: SizedBox(
+          height: GlassTopBar.barHeight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                if (lead != null) lead,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: DefaultTextStyle(
+                    style: AppTextStyles.heading3,
+                    child: Align(
+                      alignment: centerTitle ? Alignment.center : Alignment.centerLeft,
+                      child: titleWidget!,
                     ),
-                  )
-                : null,
-          ),
-          child: AppBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            centerTitle: centerTitle,
-            title: titleWidget ??
-                (title != null
-                    ? Text(
-                        title!,
-                        style: GoogleFonts.nunito(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                      )
-                    : null),
-            actions: actions,
-            leading: leading,
-            iconTheme: const IconThemeData(
-              color: AppColors.textPrimary,
+                  ),
+                ),
+                ...?actions,
+              ],
             ),
           ),
         ),
-      ),
+      );
+    }
+    return GlassTopBar(
+      title: title,
+      leading: lead,
+      actions: actions ?? const [],
     );
   }
 }

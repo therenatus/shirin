@@ -28,7 +28,9 @@ class UserModel {
       firstName: json['firstName'] as String?,
       lastName: json['lastName'] as String?,
       email: json['email'] as String?,
-      birthDate: json['birthDate'] != null ? DateTime.parse(json['birthDate'] as String) : null,
+      birthDate: json['birthDate'] != null
+          ? DateTime.parse(json['birthDate'] as String)
+          : null,
       loyaltyPoints: (json['loyaltyPoints'] as num?)?.toInt() ?? 0,
       qrCode: json['qrCode'] as String?,
     );

@@ -2,86 +2,121 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
-import '../../../../shared/widgets/glass_app_bar.dart';
-import '../../../../shared/widgets/gradient_background.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
+import '../../../../shared/widgets/loading_widget.dart';
 import '../bloc/promotions_bloc.dart';
 import '../widgets/promotion_card.dart';
 
+/// Promotions: large title over the liquid background and a list of
+/// promotion cards. Pull to refresh.
 class PromotionsListPage extends StatelessWidget {
   const PromotionsListPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: const GlassAppBar(title: 'Акции'),
-      body: GradientBackground(
-        child: BlocBuilder<PromotionsBloc, PromotionsState>(
-          builder: (context, state) {
-            if (state is PromotionsLoading) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (state is PromotionsError) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(state.message, style: AppTextStyles.bodyMedium),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => context
-                          .read<PromotionsBloc>()
-                          .add(const LoadPromotions()),
-                      child: const Text('Повторить'),
-                    ),
-                  ],
-                ),
-              );
-            }
-            if (state is PromotionsLoaded) {
-              if (state.promotions.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.local_offer_outlined,
-                          size: 64, color: AppColors.divider),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Нет активных акций',
-                        style: AppTextStyles.bodyLarge.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              return RefreshIndicator(
-                color: AppColors.primary,
-                onRefresh: () async {
-                  context
-                      .read<PromotionsBloc>()
-                      .add(const LoadPromotions());
-                },
-                child: ListView.builder(
-                  padding: EdgeInsets.fromLTRB(
-                    16,
-                    MediaQuery.of(context).padding.top + kToolbarHeight + 8,
-                    16,
-                    32,
-                  ),
-                  itemCount: state.promotions.length,
-                  itemBuilder: (context, index) {
-                    return PromotionCard(
-                        promotion: state.promotions[index]);
-                  },
-                ),
-              );
-            }
-            return const SizedBox.shrink();
-          },
+    return BlocBuilder<PromotionsBloc, PromotionsState>(
+      builder: (context, state) {
+        return GlassPage(
+          title: 'Акции',
+          eyebrow: 'Кондитерская Ширин',
+          onRefresh: () async =>
+              context.read<PromotionsBloc>().add(const LoadPromotions()),
+          slivers: _buildBody(context, state),
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildBody(BuildContext context, PromotionsState state) {
+    if (state is PromotionsError) {
+      return [
+        SliverToBoxAdapter(
+          child: _Message(
+            icon: Icons.cloud_off_rounded,
+            text: state.message,
+            action: GlassButton(
+              label: 'Повторить',
+              icon: Icons.refresh_rounded,
+              onTap: () =>
+                  context.read<PromotionsBloc>().add(const LoadPromotions()),
+            ),
+          ),
         ),
+      ];
+    }
+    if (state is PromotionsLoaded) {
+      if (state.promotions.isEmpty) {
+        return const [
+          SliverToBoxAdapter(
+            child: _Message(
+              icon: Icons.local_offer_outlined,
+              text: 'Нет активных акций',
+            ),
+          ),
+        ];
+      }
+      return [
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          sliver: SliverList.separated(
+            itemCount: state.promotions.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 16),
+            itemBuilder: (context, index) =>
+                PromotionCard(promotion: state.promotions[index]),
+          ),
+        ),
+      ];
+    }
+    if (state is PromotionsLoading) {
+      return const [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: EdgeInsets.only(top: 96),
+            child: LoadingWidget(),
+          ),
+        ),
+      ];
+    }
+    return const [];
+  }
+}
+
+class _Message extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final Widget? action;
+
+  const _Message({required this.icon, required this.text, this.action});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(40, 64, 40, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.7),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 38, color: AppColors.textLight),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodyLarge.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          if (action != null) ...[
+            const SizedBox(height: 20),
+            action!,
+          ],
+        ],
       ),
     );
   }

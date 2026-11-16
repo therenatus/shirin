@@ -2,26 +2,23 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, MapPin, Phone, Clock } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import { Store } from '../../types';
-import { getMockStores, isTestMode } from '../../services/mockData';
+import { StoreInput } from '../../services/mappers';
 import api from '../../services/api';
 
 const StoresList: React.FC = () => {
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingStore, setEditingStore] = useState<Store | null>(null);
 
   useEffect(() => {
     const fetchStores = async () => {
       try {
-        if (isTestMode()) {
-          setStores(getMockStores());
-        } else {
-          const response = await api.get('/stores');
-          setStores(response.data);
-        }
+        const response = await api.get<Store[]>('/stores');
+        setStores(response.data);
       } catch {
-        setStores(getMockStores());
+        setError('Не удалось загрузить магазины');
       } finally {
         setLoading(false);
       }
@@ -32,31 +29,23 @@ const StoresList: React.FC = () => {
   const handleDelete = async (id: string) => {
     if (!window.confirm('Удалить магазин?')) return;
     try {
-      if (!isTestMode()) {
-        await api.delete(`/stores/${id}`);
-      }
+      await api.delete(`/stores/${id}`);
       setStores((prev) => prev.filter((s) => s.id !== id));
     } catch {
       alert('Ошибка при удалении');
     }
   };
 
-  const handleSave = async (data: Omit<Store, 'id'>) => {
+  const handleSave = async (data: StoreInput) => {
     try {
       if (editingStore) {
-        if (!isTestMode()) {
-          await api.put(`/stores/${editingStore.id}`, data);
-        }
+        const response = await api.patch<Store>(`/stores/${editingStore.id}`, data);
         setStores((prev) =>
-          prev.map((s) => (s.id === editingStore.id ? { ...s, ...data } : s))
+          prev.map((s) => (s.id === editingStore.id ? response.data : s))
         );
       } else {
-        const newStore: Store = { id: `store-${Date.now()}`, ...data };
-        if (!isTestMode()) {
-          const response = await api.post('/stores', data);
-          newStore.id = response.data.id;
-        }
-        setStores((prev) => [...prev, newStore]);
+        const response = await api.post<Store>('/stores', data);
+        setStores((prev) => [...prev, response.data]);
       }
       setShowForm(false);
       setEditingStore(null);
@@ -87,6 +76,8 @@ const StoresList: React.FC = () => {
             onCancel={() => { setShowForm(false); setEditingStore(null); }}
           />
         )}
+
+        {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
 
         {loading ? (
           <div className="flex justify-center py-12">
@@ -121,18 +112,14 @@ const StoresList: React.FC = () => {
                     <MapPin size={14} />
                     <span>{store.address}</span>
                   </div>
-                  {store.phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone size={14} />
-                      <span>{store.phone}</span>
-                    </div>
-                  )}
-                  {store.workingHours && (
-                    <div className="flex items-center gap-2">
-                      <Clock size={14} />
-                      <span>{store.workingHours}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <Phone size={14} />
+                    <span>{store.phone}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock size={14} />
+                    <span>{store.workHours}</span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -145,20 +132,31 @@ const StoresList: React.FC = () => {
 
 interface StoreFormProps {
   store: Store | null;
-  onSave: (data: Omit<Store, 'id'>) => void;
+  onSave: (data: StoreInput) => void;
   onCancel: () => void;
 }
+
+const inputClass =
+  'px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20';
 
 const StoreForm: React.FC<StoreFormProps> = ({ store, onSave, onCancel }) => {
   const [name, setName] = useState(store?.name || '');
   const [address, setAddress] = useState(store?.address || '');
   const [phone, setPhone] = useState(store?.phone || '');
-  const [workingHours, setWorkingHours] = useState(store?.workingHours || '');
+  const [workHours, setWorkHours] = useState(store?.workHours || '');
+  const [latitude, setLatitude] = useState(store?.latitude?.toString() || '');
+  const [longitude, setLongitude] = useState(store?.longitude?.toString() || '');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !address) return;
-    onSave({ name, address, phone: phone || undefined, workingHours: workingHours || undefined });
+    onSave({
+      name,
+      address,
+      phone,
+      workHours,
+      latitude: Number(latitude),
+      longitude: Number(longitude),
+    });
   };
 
   return (
@@ -169,14 +167,14 @@ const StoreForm: React.FC<StoreFormProps> = ({ store, onSave, onCancel }) => {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Название"
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className={`w-full ${inputClass}`}
           required
         />
         <input
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           placeholder="Адрес"
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className={`w-full ${inputClass}`}
           required
         />
         <div className="grid grid-cols-2 gap-3">
@@ -184,13 +182,37 @@ const StoreForm: React.FC<StoreFormProps> = ({ store, onSave, onCancel }) => {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="Телефон"
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className={inputClass}
+            required
           />
           <input
-            value={workingHours}
-            onChange={(e) => setWorkingHours(e.target.value)}
+            value={workHours}
+            onChange={(e) => setWorkHours(e.target.value)}
             placeholder="Режим работы (08:00 - 21:00)"
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className={inputClass}
+            required
+          />
+          <input
+            type="number"
+            step="any"
+            min={-90}
+            max={90}
+            value={latitude}
+            onChange={(e) => setLatitude(e.target.value)}
+            placeholder="Широта (42.8746)"
+            className={inputClass}
+            required
+          />
+          <input
+            type="number"
+            step="any"
+            min={-180}
+            max={180}
+            value={longitude}
+            onChange={(e) => setLongitude(e.target.value)}
+            placeholder="Долгота (74.5698)"
+            className={inputClass}
+            required
           />
         </div>
         <div className="flex gap-2">

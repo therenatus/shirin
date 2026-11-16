@@ -3,7 +3,12 @@ import 'dart:io';
 class ApiEndpoints {
   ApiEndpoints._();
 
+  static const String _envUrl = String.fromEnvironment('API_URL');
+
   static String get baseUrl {
+    if (_envUrl.isNotEmpty) {
+      return _envUrl;
+    }
     if (Platform.isAndroid) {
       return 'http://10.0.2.2:3000/api/v1';
     }
@@ -34,7 +39,6 @@ class ApiEndpoints {
   static const String loyalty = '/loyalty';
   static const String loyaltyHistory = '/loyalty/history';
   static const String punchCards = '/loyalty/punch-cards';
-  static String claimFreeCoffee(String size) => '/loyalty/punch-cards/$size/claim';
 
   // Promotions
   static const String promotions = '/promotions';

@@ -1,6 +1,9 @@
-import { DashboardStats, Order, Product, Category, User, Promotion, Store } from '../types';
+import { DashboardStats, Order, Product, Category, User, Promotion } from '../types';
 
-const isTestMode = () => localStorage.getItem('admin_token') === 'admin-test-token';
+// TODO: backend endpoints for dashboard stats, users list and promotions CRUD
+// do not exist yet. Until they do, the Dashboard, Users and Promotions pages
+// work on mock data. Products, orders and stores use the real API.
+const isTestMode = () => true;
 
 export const getMockDashboardStats = (): DashboardStats => ({
   todaySales: 45800,
@@ -39,10 +42,10 @@ export const getMockOrders = (): Order[] => [
 ];
 
 export const getMockUsers = (): User[] => [
-  { id: 'u-1', phone: '+996555111222', firstName: 'Алия', lastName: 'Каримова', loyaltyPoints: 320, role: 'USER', createdAt: '2024-01-10T08:00:00Z' },
-  { id: 'u-2', phone: '+996555333444', firstName: 'Бакыт', lastName: 'Асанов', loyaltyPoints: 150, role: 'USER', createdAt: '2024-01-12T10:00:00Z' },
-  { id: 'u-3', phone: '+996555555666', firstName: 'Гулзат', lastName: 'Токтоева', loyaltyPoints: 500, role: 'USER', createdAt: '2024-01-15T12:00:00Z' },
-  { id: 'u-4', phone: '+996555777888', firstName: 'Данияр', lastName: 'Жумабеков', loyaltyPoints: 80, role: 'USER', createdAt: '2024-02-01T09:00:00Z' },
+  { id: 'u-1', phone: '+996555111222', firstName: 'Алия', lastName: 'Каримова', loyaltyPoints: 320, role: 'CLIENT', createdAt: '2024-01-10T08:00:00Z' },
+  { id: 'u-2', phone: '+996555333444', firstName: 'Бакыт', lastName: 'Асанов', loyaltyPoints: 150, role: 'CLIENT', createdAt: '2024-01-12T10:00:00Z' },
+  { id: 'u-3', phone: '+996555555666', firstName: 'Гулзат', lastName: 'Токтоева', loyaltyPoints: 500, role: 'CLIENT', createdAt: '2024-01-15T12:00:00Z' },
+  { id: 'u-4', phone: '+996555777888', firstName: 'Данияр', lastName: 'Жумабеков', loyaltyPoints: 80, role: 'CLIENT', createdAt: '2024-02-01T09:00:00Z' },
   { id: 'u-admin', phone: '+996999999999', firstName: 'Админ', lastName: 'Ширин', loyaltyPoints: 0, role: 'ADMIN', createdAt: '2024-01-01T00:00:00Z' },
 ];
 
@@ -52,10 +55,5 @@ export const getMockPromotions = (): Promotion[] => [
   { id: 'promo-3', title: 'День рождения', titleRu: 'День рождения с Ширин', description: '', descriptionRu: 'Закажите торт на день рождения и получите набор макарунов в подарок.', startDate: new Date(Date.now() - 86400000 * 30).toISOString(), endDate: new Date(Date.now() + 86400000 * 60).toISOString(), isActive: true, createdAt: '2024-01-05T10:00:00Z' },
 ];
 
-export const getMockStores = (): Store[] => [
-  { id: 'store-1', name: 'Ширин — Центр', address: 'ул. Киевская, 120', phone: '+996 312 123 456', lat: 42.8746, lng: 74.5698, workingHours: '08:00 - 21:00' },
-  { id: 'store-2', name: 'Ширин — Юг', address: 'ул. Ахунбаева, 85', phone: '+996 312 654 321', lat: 42.856, lng: 74.582, workingHours: '09:00 - 22:00' },
-  { id: 'store-3', name: 'Ширин — Восток', address: 'пр. Жибек Жолу, 200', phone: '+996 312 789 012', lat: 42.878, lng: 74.61, workingHours: '08:00 - 20:00' },
-];
 
 export { isTestMode };

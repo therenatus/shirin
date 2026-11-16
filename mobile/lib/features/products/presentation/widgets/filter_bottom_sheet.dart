@@ -1,10 +1,11 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
-import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 import '../../domain/entities/category.dart';
 
+/// Filter content for the catalog. Open it with [showGlassSheet]; it pops
+/// with a map of the chosen filters (or nothing when dismissed).
 class FilterBottomSheet extends StatefulWidget {
   final List<Category> categories;
   final String? selectedCategoryId;
@@ -28,10 +29,19 @@ class FilterBottomSheet extends StatefulWidget {
 }
 
 class _FilterBottomSheetState extends State<FilterBottomSheet> {
+  static const double _maxPrice = 5000;
+
   late String? _categoryId;
   late String? _sortBy;
   late bool _isNew;
   late RangeValues _priceRange;
+
+  static const _sortOptions = <(String, String?)>[
+    ('По умолчанию', null),
+    ('Цена ↑', 'price_asc'),
+    ('Цена ↓', 'price_desc'),
+    ('Новинки', 'newest'),
+  ];
 
   @override
   void initState() {
@@ -41,178 +51,163 @@ class _FilterBottomSheetState extends State<FilterBottomSheet> {
     _isNew = widget.isNew ?? false;
     _priceRange = RangeValues(
       widget.minPrice ?? 0,
-      widget.maxPrice ?? 5000,
+      widget.maxPrice ?? _maxPrice,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: AppColors.glassFill,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            border: Border(
-              top: BorderSide(color: AppColors.glassBorder, width: 1),
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Фильтры', style: AppTextStyles.heading2),
+          const SizedBox(height: 20),
+          _SectionLabel('Категория'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.divider,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+              GlassChip(
+                label: 'Все',
+                selected: _categoryId == null,
+                onTap: () => setState(() => _categoryId = null),
+              ),
+              for (final c in widget.categories)
+                GlassChip(
+                  label: c.name,
+                  selected: _categoryId == c.id,
+                  onTap: () => setState(() => _categoryId = c.id),
                 ),
-              ),
-              const SizedBox(height: 20),
-              Text('Фильтры', style: AppTextStyles.heading3),
-              const SizedBox(height: 20),
-
-              // Categories
-              Text('Категория', style: AppTextStyles.label),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _buildChip('Все', null),
-                  ...widget.categories.map(
-                    (c) => _buildChip(c.name, c.id),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Sort
-              Text('Сортировка', style: AppTextStyles.label),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _buildSortChip('По умолчанию', null),
-                  _buildSortChip('Цена ↑', 'price_asc'),
-                  _buildSortChip('Цена ↓', 'price_desc'),
-                  _buildSortChip('Новинки', 'newest'),
-                ],
-              ),
-              const SizedBox(height: 20),
-
-              // Price Range
-              Text('Цена: ${_priceRange.start.toInt()} - ${_priceRange.end.toInt()} сом',
-                  style: AppTextStyles.label),
-              RangeSlider(
-                values: _priceRange,
-                min: 0,
-                max: 5000,
-                divisions: 50,
-                activeColor: AppColors.primary,
-                onChanged: (values) {
-                  setState(() => _priceRange = values);
-                },
-              ),
-              const SizedBox(height: 12),
-
-              // New only
-              SwitchListTile(
-                title: Text('Только новинки', style: AppTextStyles.bodyMedium),
-                value: _isNew,
-                activeTrackColor: AppColors.primary,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (val) => setState(() => _isNew = val),
-              ),
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      label: 'Сбросить',
-                      variant: AppButtonVariant.outlined,
-                      onPressed: () {
-                        Navigator.pop(context, {
-                          'categoryId': null,
-                          'sortBy': null,
-                          'isNew': null,
-                          'minPrice': null,
-                          'maxPrice': null,
-                        });
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: AppButton(
-                      label: 'Применить',
-                      onPressed: () {
-                        Navigator.pop(context, {
-                          'categoryId': _categoryId,
-                          'sortBy': _sortBy,
-                          'isNew': _isNew ? true : null,
-                          'minPrice': _priceRange.start > 0 ? _priceRange.start : null,
-                          'maxPrice': _priceRange.end < 5000 ? _priceRange.end : null,
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
             ],
           ),
-        ),
+          const SizedBox(height: 24),
+          _SectionLabel('Сортировка'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final (label, value) in _sortOptions)
+                GlassChip(
+                  label: label,
+                  selected: _sortBy == value,
+                  onTap: () => setState(() => _sortBy = value),
+                ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(child: _SectionLabel('Цена', bottom: 0)),
+              Text(
+                '${_priceRange.start.toInt()} – ${_priceRange.end.toInt()} сом',
+                style: AppTextStyles.label.copyWith(color: AppColors.primary),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: AppColors.primary,
+              inactiveTrackColor: AppColors.primary.withValues(alpha: 0.14),
+              thumbColor: Colors.white,
+              overlayColor: AppColors.primary.withValues(alpha: 0.08),
+              trackHeight: 4,
+              rangeThumbShape: const RoundRangeSliderThumbShape(
+                enabledThumbRadius: 13,
+                elevation: 3,
+              ),
+            ),
+            child: RangeSlider(
+              values: _priceRange,
+              min: 0,
+              max: _maxPrice,
+              divisions: 50,
+              onChanged: (values) => setState(() => _priceRange = values),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 6, 10, 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.auto_awesome_rounded,
+                    size: 20, color: AppColors.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('Только новинки', style: AppTextStyles.bodyMedium),
+                ),
+                Switch.adaptive(
+                  value: _isNew,
+                  activeTrackColor: AppColors.primary,
+                  onChanged: (val) => setState(() => _isNew = val),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: GlassButton(
+                  label: 'Сбросить',
+                  expanded: true,
+                  onTap: () {
+                    Navigator.pop(context, {
+                      'categoryId': null,
+                      'sortBy': null,
+                      'isNew': null,
+                      'minPrice': null,
+                      'maxPrice': null,
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: GlassButton(
+                  label: 'Применить',
+                  prominent: true,
+                  expanded: true,
+                  onTap: () {
+                    Navigator.pop(context, {
+                      'categoryId': _categoryId,
+                      'sortBy': _sortBy,
+                      'isNew': _isNew ? true : null,
+                      'minPrice':
+                          _priceRange.start > 0 ? _priceRange.start : null,
+                      'maxPrice':
+                          _priceRange.end < _maxPrice ? _priceRange.end : null,
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
+}
 
-  Widget _buildChip(String label, String? categoryId) {
-    final isSelected = _categoryId == categoryId;
-    return GestureDetector(
-      onTap: () => setState(() => _categoryId = categoryId),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.secondaryBackground,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: AppTextStyles.bodySmall.copyWith(
-            color: isSelected ? Colors.white : AppColors.textPrimary,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-          ),
-        ),
-      ),
-    );
-  }
+class _SectionLabel extends StatelessWidget {
+  final String text;
+  final double bottom;
 
-  Widget _buildSortChip(String label, String? sortBy) {
-    final isSelected = _sortBy == sortBy;
-    return GestureDetector(
-      onTap: () => setState(() => _sortBy = sortBy),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.secondaryBackground,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: AppTextStyles.bodySmall.copyWith(
-            color: isSelected ? Colors.white : AppColors.textPrimary,
-            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-          ),
-        ),
+  const _SectionLabel(this.text, {this.bottom = 10});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(left: 2, bottom: bottom),
+      child: Text(
+        text.toUpperCase(),
+        style: AppTextStyles.overline.copyWith(color: AppColors.textSecondary),
       ),
     );
   }

@@ -9,7 +9,7 @@ abstract class AuthRemoteDatasource {
   Future<AuthResponseModel> verifyCode(String phone, String code);
   Future<UserModel> getCurrentUser();
   Future<UserModel> updateProfile(UpdateProfileParams params);
-  Future<void> logout();
+  Future<void> logout(String? refreshToken);
 }
 
 class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
@@ -19,10 +19,7 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
 
   @override
   Future<void> sendCode(String phone) async {
-    await _apiClient.post(
-      ApiEndpoints.sendCode,
-      data: {'phone': phone},
-    );
+    await _apiClient.post(ApiEndpoints.sendCode, data: {'phone': phone});
   }
 
   @override
@@ -50,7 +47,11 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
   }
 
   @override
-  Future<void> logout() async {
-    await _apiClient.post(ApiEndpoints.logout);
+  Future<void> logout(String? refreshToken) async {
+    // Sending the refresh token lets the server revoke it
+    await _apiClient.post(
+      ApiEndpoints.logout,
+      data: refreshToken != null ? {'refreshToken': refreshToken} : null,
+    );
   }
 }

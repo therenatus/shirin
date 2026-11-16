@@ -20,7 +20,6 @@ import '../../features/loyalty/domain/repositories/loyalty_repository.dart';
 import '../../features/loyalty/domain/usecases/get_loyalty_history.dart';
 import '../../features/loyalty/domain/usecases/get_loyalty_info.dart';
 import '../../features/loyalty/domain/usecases/get_punch_cards.dart';
-import '../../features/loyalty/domain/usecases/claim_free_coffee.dart';
 import '../../features/loyalty/presentation/bloc/loyalty_bloc.dart';
 import '../../features/loyalty/presentation/bloc/punch_cards_bloc.dart';
 import '../../features/orders/data/datasources/orders_remote_datasource.dart';
@@ -178,7 +177,6 @@ Future<void> init() async {
   sl.registerLazySingleton(() => GetLoyaltyInfo(sl()));
   sl.registerLazySingleton(() => GetLoyaltyHistory(sl()));
   sl.registerLazySingleton(() => GetPunchCards(sl()));
-  sl.registerLazySingleton(() => ClaimFreeCoffee(sl()));
 
   // Loyalty - BLoC
   sl.registerFactory(
@@ -187,7 +185,7 @@ Future<void> init() async {
 
   // Punch Cards - BLoC
   sl.registerFactory(
-    () => PunchCardsBloc(getPunchCards: sl(), claimFreeCoffee: sl()),
+    () => PunchCardsBloc(getPunchCards: sl()),
   );
 
   // Promotions - Data Sources

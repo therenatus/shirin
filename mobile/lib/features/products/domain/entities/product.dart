@@ -13,6 +13,7 @@ class Product extends Equatable {
   final bool isAvailable;
   final double? weight;
   final String? composition;
+  final int? calories;
 
   const Product({
     required this.id,
@@ -27,6 +28,7 @@ class Product extends Equatable {
     this.isAvailable = true,
     this.weight,
     this.composition,
+    this.calories,
   });
 
   bool get hasDiscount => oldPrice != null && oldPrice! > price;

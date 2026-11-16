@@ -18,6 +18,8 @@ class ProductsRepositoryImpl implements ProductsRepository {
       return Right(models.map((m) => m.toEntity()).toList());
     } on NetworkException {
       return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
@@ -48,6 +50,8 @@ class ProductsRepositoryImpl implements ProductsRepository {
       return Right(models.map((m) => m.toEntity()).toList());
     } on NetworkException {
       return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
@@ -60,6 +64,8 @@ class ProductsRepositoryImpl implements ProductsRepository {
       return Right(model.toEntity());
     } on NetworkException {
       return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }

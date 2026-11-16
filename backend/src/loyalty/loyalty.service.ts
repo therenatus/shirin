@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CoffeeSize } from '@prisma/client';
+import { CoffeeSize, CoffeePunchCard, Prisma } from '@prisma/client';
 
 export interface LoyaltyTransaction {
   id: string;
@@ -86,7 +90,8 @@ export class LoyaltyService {
         transactions.push({
           id: `${order.id}-used`,
           type: order.status === 'CANCELLED' ? 'refunded' : 'used',
-          points: order.status === 'CANCELLED' ? order.pointsUsed : -order.pointsUsed,
+          points:
+            order.status === 'CANCELLED' ? order.pointsUsed : -order.pointsUsed,
           description:
             order.status === 'CANCELLED'
               ? `Возврат баллов за заказ ${order.orderNumber}`
@@ -113,7 +118,8 @@ export class LoyaltyService {
 
     // Sort by date descending
     transactions.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
 
     return transactions;
@@ -210,6 +216,7 @@ export class LoyaltyService {
           currentPunches: 0,
           maxPunches: 6,
         })),
+        skipDuplicates: true,
       });
     }
 
@@ -219,127 +226,99 @@ export class LoyaltyService {
       orderBy: { size: 'asc' },
     });
 
-    return allCards.map((card) => ({
-      id: card.id,
-      size: card.size,
-      sizeName: this.getSizeName(card.size),
-      currentPunches: card.currentPunches,
-      maxPunches: card.maxPunches,
-      isComplete: card.currentPunches >= card.maxPunches,
-      freeItemClaimed: card.freeItemClaimed,
-      createdAt: card.createdAt,
-      completedAt: card.completedAt || undefined,
-    }));
+    return allCards.map((card) => this.formatPunchCard(card));
   }
 
-  async addPunch(userId: string, size: CoffeeSize, count: number = 1): Promise<PunchCard> {
-    // Get or create punch card for this size
-    let card = await this.prisma.coffeePunchCard.findUnique({
-      where: {
-        userId_size: { userId, size },
-      },
+  /**
+   * Adds punches to the user's card. Must be called inside the transaction
+   * that marks the order as delivered, so punches are not awarded twice.
+   */
+  async addPunch(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    size: CoffeeSize,
+    count: number = 1,
+  ): Promise<PunchCard> {
+    const card = await tx.coffeePunchCard.upsert({
+      where: { userId_size: { userId, size } },
+      create: { userId, size, currentPunches: 0, maxPunches: 6 },
+      update: {},
     });
 
-    if (!card) {
-      card = await this.prisma.coffeePunchCard.create({
-        data: {
-          userId,
-          size,
-          currentPunches: 0,
-          maxPunches: 6,
-        },
-      });
-    }
-
-    // If card is already complete and claimed, reset it
-    if (card.currentPunches >= card.maxPunches && card.freeItemClaimed) {
-      card = await this.prisma.coffeePunchCard.update({
-        where: { id: card.id },
-        data: {
-          currentPunches: 0,
-          freeItemClaimed: false,
-          completedAt: null,
-        },
-      });
-    }
-
-    // Add punches
+    // Punches beyond maxPunches are not accumulated until the free coffee is given out
     const newPunches = Math.min(card.currentPunches + count, card.maxPunches);
     const isComplete = newPunches >= card.maxPunches;
 
-    card = await this.prisma.coffeePunchCard.update({
+    const updated = await tx.coffeePunchCard.update({
       where: { id: card.id },
       data: {
         currentPunches: newPunches,
-        completedAt: isComplete && !card.completedAt ? new Date() : card.completedAt,
+        completedAt:
+          isComplete && !card.completedAt ? new Date() : card.completedAt,
       },
     });
 
+    return this.formatPunchCard(updated);
+  }
+
+  /** Staff: find a customer by the QR code shown in the mobile app. */
+  async findCustomerByQr(qrCode: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { qrCode },
+      select: {
+        id: true,
+        phone: true,
+        firstName: true,
+        lastName: true,
+        loyaltyPoints: true,
+        isActive: true,
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    const punchCards = await this.getPunchCards(user.id);
+
     return {
-      id: card.id,
-      size: card.size,
-      sizeName: this.getSizeName(card.size),
-      currentPunches: card.currentPunches,
-      maxPunches: card.maxPunches,
-      isComplete: card.currentPunches >= card.maxPunches,
-      freeItemClaimed: card.freeItemClaimed,
-      createdAt: card.createdAt,
-      completedAt: card.completedAt || undefined,
+      id: user.id,
+      phone: user.phone,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      loyaltyPoints: user.loyaltyPoints,
+      level: this.calculateLoyaltyLevel(user.loyaltyPoints),
+      punchCards,
     };
   }
 
-  async claimFreeCoffee(userId: string, size: CoffeeSize): Promise<PunchCard> {
+  /**
+   * Staff: give out the free coffee for a completed card and reset the card.
+   * The conditional update makes double-claiming impossible even under concurrency.
+   */
+  async claimFreeCoffee(qrCode: string, size: CoffeeSize): Promise<PunchCard> {
+    const user = await this.prisma.user.findUnique({
+      where: { qrCode },
+      select: { id: true, isActive: true },
+    });
+
+    if (!user || !user.isActive) {
+      throw new NotFoundException('Customer not found');
+    }
+
     const card = await this.prisma.coffeePunchCard.findUnique({
-      where: {
-        userId_size: { userId, size },
-      },
+      where: { userId_size: { userId: user.id, size } },
     });
 
     if (!card) {
       throw new NotFoundException('Punch card not found');
     }
 
-    if (card.currentPunches < card.maxPunches) {
-      throw new BadRequestException('Punch card is not complete');
-    }
-
-    if (card.freeItemClaimed) {
-      throw new BadRequestException('Free coffee already claimed');
-    }
-
-    const updatedCard = await this.prisma.coffeePunchCard.update({
-      where: { id: card.id },
-      data: {
-        freeItemClaimed: true,
-      },
-    });
-
-    return {
-      id: updatedCard.id,
-      size: updatedCard.size,
-      sizeName: this.getSizeName(updatedCard.size),
-      currentPunches: updatedCard.currentPunches,
-      maxPunches: updatedCard.maxPunches,
-      isComplete: updatedCard.currentPunches >= updatedCard.maxPunches,
-      freeItemClaimed: updatedCard.freeItemClaimed,
-      createdAt: updatedCard.createdAt,
-      completedAt: updatedCard.completedAt || undefined,
-    };
-  }
-
-  async resetPunchCard(userId: string, size: CoffeeSize): Promise<PunchCard> {
-    const card = await this.prisma.coffeePunchCard.findUnique({
+    const { count } = await this.prisma.coffeePunchCard.updateMany({
       where: {
-        userId_size: { userId, size },
+        id: card.id,
+        currentPunches: { gte: card.maxPunches },
       },
-    });
-
-    if (!card) {
-      throw new NotFoundException('Punch card not found');
-    }
-
-    const updatedCard = await this.prisma.coffeePunchCard.update({
-      where: { id: card.id },
       data: {
         currentPunches: 0,
         freeItemClaimed: false,
@@ -347,16 +326,28 @@ export class LoyaltyService {
       },
     });
 
+    if (count === 0) {
+      throw new BadRequestException('Punch card is not complete');
+    }
+
+    const updated = await this.prisma.coffeePunchCard.findUniqueOrThrow({
+      where: { id: card.id },
+    });
+
+    return this.formatPunchCard(updated);
+  }
+
+  private formatPunchCard(card: CoffeePunchCard): PunchCard {
     return {
-      id: updatedCard.id,
-      size: updatedCard.size,
-      sizeName: this.getSizeName(updatedCard.size),
-      currentPunches: updatedCard.currentPunches,
-      maxPunches: updatedCard.maxPunches,
-      isComplete: false,
-      freeItemClaimed: false,
-      createdAt: updatedCard.createdAt,
-      completedAt: undefined,
+      id: card.id,
+      size: card.size,
+      sizeName: this.getSizeName(card.size),
+      currentPunches: card.currentPunches,
+      maxPunches: card.maxPunches,
+      isComplete: card.currentPunches >= card.maxPunches,
+      freeItemClaimed: card.freeItemClaimed,
+      createdAt: card.createdAt,
+      completedAt: card.completedAt || undefined,
     };
   }
 }

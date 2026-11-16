@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
+import { RedisModule } from './redis/redis.module';
+import { SmsModule } from './sms/sms.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -14,14 +17,14 @@ import { PromotionsModule } from './promotions/promotions.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import databaseConfig from './config/database.config';
 import jwtConfig from './config/jwt.config';
-import minioConfig from './config/minio.config';
+import storageConfig from './config/storage.config';
 import redisConfig from './config/redis.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, jwtConfig, minioConfig, redisConfig],
+      load: [databaseConfig, jwtConfig, storageConfig, redisConfig],
     }),
     ThrottlerModule.forRoot([
       {
@@ -30,6 +33,8 @@ import redisConfig from './config/redis.config';
       },
     ]),
     PrismaModule,
+    RedisModule,
+    SmsModule,
     HealthModule,
     AuthModule,
     UsersModule,
@@ -41,5 +46,6 @@ import redisConfig from './config/redis.config';
     PromotionsModule,
     LoyaltyModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

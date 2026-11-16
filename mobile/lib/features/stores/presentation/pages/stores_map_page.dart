@@ -4,13 +4,16 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
-import '../../../../shared/widgets/glass_container.dart';
+import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 import '../../domain/entities/store.dart';
 import '../bloc/stores_bloc.dart';
+import '../widgets/store_map_widgets.dart';
 
+/// Full-screen store map (`/stores-map`): edge-to-edge tiles with floating
+/// clear-glass controls and a glass card for the selected store.
 class StoresMapPage extends StatefulWidget {
   const StoresMapPage({super.key});
 
@@ -20,6 +23,7 @@ class StoresMapPage extends StatefulWidget {
 
 class _StoresMapPageState extends State<StoresMapPage> {
   final MapController _mapController = MapController();
+  bool _mapReady = false;
   Store? _selectedStore;
   LatLng? _userLocation;
   bool _isLoadingLocation = false;
@@ -41,39 +45,35 @@ class _StoresMapPageState extends State<StoresMapPage> {
       _locationError = null;
     });
 
+    void fail(String message) {
+      if (!mounted) return;
+      setState(() {
+        _locationError = message;
+        _isLoadingLocation = false;
+      });
+    }
+
     try {
-      // Check if location services are enabled
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        setState(() {
-          _locationError = 'Службы геолокации отключены';
-          _isLoadingLocation = false;
-        });
+        fail('Службы геолокации отключены');
         return;
       }
 
-      // Check permissions
-      LocationPermission permission = await Geolocator.checkPermission();
+      var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          setState(() {
-            _locationError = 'Доступ к геолокации запрещен';
-            _isLoadingLocation = false;
-          });
+          fail('Доступ к геолокации запрещен');
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
-        setState(() {
-          _locationError = 'Доступ к геолокации запрещен навсегда';
-          _isLoadingLocation = false;
-        });
+        fail('Доступ к геолокации запрещен навсегда');
         return;
       }
 
-      // Get current position
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
@@ -81,488 +81,300 @@ class _StoresMapPageState extends State<StoresMapPage> {
         ),
       );
 
+      if (!mounted) return;
       setState(() {
         _userLocation = LatLng(position.latitude, position.longitude);
         _isLoadingLocation = false;
       });
     } catch (e) {
-      setState(() {
-        _locationError = 'Не удалось определить местоположение';
-        _isLoadingLocation = false;
-      });
+      fail('Не удалось определить местоположение');
     }
   }
 
   void _centerOnUserLocation() {
-    if (_userLocation != null) {
+    if (_userLocation != null && _mapReady) {
       _mapController.move(_userLocation!, 15.0);
     } else {
       _getCurrentLocation();
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text('Карта магазинов', style: AppTextStyles.heading3),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.list),
-            tooltip: 'Список магазинов',
-            onPressed: () => context.pop(),
-          ),
-        ],
-      ),
-      body: BlocBuilder<StoresBloc, StoresState>(
-        builder: (context, state) {
-          if (state is StoresLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (state is StoresError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(state.message, style: AppTextStyles.bodyMedium),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () =>
-                        context.read<StoresBloc>().add(const LoadStores()),
-                    child: const Text('Повторить'),
-                  ),
-                ],
-              ),
-            );
-          }
-          if (state is StoresLoaded) {
-            final stores = state.stores;
-            final storesWithCoords =
-                stores.where((s) => s.lat != null && s.lng != null).toList();
-
-            return Stack(
-              children: [
-                // Map
-                FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: _userLocation ??
-                        (storesWithCoords.isNotEmpty
-                            ? LatLng(storesWithCoords.first.lat!,
-                                storesWithCoords.first.lng!)
-                            : _defaultCenter),
-                    initialZoom: _defaultZoom,
-                    onTap: (_, _) {
-                      setState(() => _selectedStore = null);
-                    },
-                  ),
-                  children: [
-                    // OpenStreetMap tiles
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.shirin.app',
-                    ),
-                    // Markers layer
-                    MarkerLayer(
-                      markers: [
-                        // User location marker
-                        if (_userLocation != null)
-                          Marker(
-                            point: _userLocation!,
-                            width: 30,
-                            height: 30,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.blue,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 3,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.blue.withValues(alpha: 0.4),
-                                    blurRadius: 10,
-                                    spreadRadius: 2,
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                            ),
-                          ),
-                        // Store markers
-                        ...storesWithCoords.map((store) {
-                          final isSelected = _selectedStore?.id == store.id;
-                          return Marker(
-                            point: LatLng(store.lat!, store.lng!),
-                            width: isSelected ? 50 : 40,
-                            height: isSelected ? 50 : 40,
-                            child: GestureDetector(
-                              onTap: () => _onMarkerTap(store),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? AppColors.primary
-                                      : Colors.white,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: AppColors.primary,
-                                    width: 3,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color:
-                                          AppColors.primary.withValues(alpha: 0.3),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                                ),
-                                child: Icon(
-                                  Icons.store,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : AppColors.primary,
-                                  size: isSelected ? 26 : 22,
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
-                  ],
-                ),
-
-                // Selected store info card
-                if (_selectedStore != null)
-                  Positioned(
-                    left: 16,
-                    right: 16,
-                    bottom: MediaQuery.of(context).padding.bottom + 16,
-                    child: _buildStoreInfoCard(_selectedStore!),
-                  ),
-
-                // Controls
-                Positioned(
-                  right: 16,
-                  bottom: _selectedStore != null
-                      ? MediaQuery.of(context).padding.bottom + 200
-                      : MediaQuery.of(context).padding.bottom + 100,
-                  child: Column(
-                    children: [
-                      // My location button
-                      _buildControlButton(
-                        _isLoadingLocation
-                            ? Icons.hourglass_empty
-                            : Icons.my_location,
-                        _centerOnUserLocation,
-                        isLoading: _isLoadingLocation,
-                        hasError: _locationError != null && _userLocation == null,
-                      ),
-                      const SizedBox(height: 8),
-                      // Zoom controls
-                      _buildControlButton(Icons.add, () {
-                        _mapController.move(
-                          _mapController.camera.center,
-                          _mapController.camera.zoom + 1,
-                        );
-                      }),
-                      const SizedBox(height: 8),
-                      _buildControlButton(Icons.remove, () {
-                        _mapController.move(
-                          _mapController.camera.center,
-                          _mapController.camera.zoom - 1,
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-
-                // Location error snackbar
-                if (_locationError != null && _userLocation == null)
-                  Positioned(
-                    top: MediaQuery.of(context).padding.top + kToolbarHeight + 8,
-                    left: 16,
-                    right: 16,
-                    child: GlassContainer(
-                      borderRadius: 12,
-                      enableBlur: false,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.location_off,
-                            color: Colors.orange,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              _locationError!,
-                              style: AppTextStyles.bodySmall,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: _getCurrentLocation,
-                            child: const Icon(
-                              Icons.refresh,
-                              color: AppColors.primary,
-                              size: 20,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          }
-          return const SizedBox.shrink();
-        },
-      ),
-    );
-  }
-
-  Widget _buildControlButton(
-    IconData icon,
-    VoidCallback onPressed, {
-    bool isLoading = false,
-    bool hasError = false,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: IconButton(
-        icon: isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.primary,
-                ),
-              )
-            : Icon(
-                icon,
-                color: hasError ? Colors.orange : AppColors.primary,
-              ),
-        onPressed: isLoading ? null : onPressed,
-      ),
-    );
-  }
-
-  Widget _buildStoreInfoCard(Store store) {
-    return GlassContainer(
-      borderRadius: 20,
-      enableBlur: false,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Header with name and close button
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.store,
-                  color: AppColors.primary,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      store.name,
-                      style: AppTextStyles.bodyLarge.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (_userLocation != null &&
-                        store.lat != null &&
-                        store.lng != null)
-                      Text(
-                        _getDistanceText(store),
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.primary,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, size: 20),
-                onPressed: () => setState(() => _selectedStore = null),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Address
-          _buildInfoRow(Icons.location_on_outlined, store.address),
-
-          // Working hours
-          if (store.workingHours != null) ...[
-            const SizedBox(height: 8),
-            _buildInfoRow(Icons.access_time, store.workingHours!),
-          ],
-
-          // Phone
-          if (store.phone != null) ...[
-            const SizedBox(height: 8),
-            GestureDetector(
-              onTap: () => _callPhone(store.phone!),
-              child: _buildInfoRow(
-                Icons.phone_outlined,
-                store.phone!,
-                isLink: true,
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 16),
-
-          // Action buttons
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () => _openInMaps(store),
-                  icon: const Icon(Icons.directions, size: 18),
-                  label: const Text('Маршрут'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                ),
-              ),
-              if (store.phone != null) ...[
-                const SizedBox(width: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.primary),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: IconButton(
-                    onPressed: () => _callPhone(store.phone!),
-                    icon: const Icon(Icons.phone, color: AppColors.primary),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getDistanceText(Store store) {
-    if (_userLocation == null || store.lat == null || store.lng == null) {
-      return '';
-    }
-
-    final distanceInMeters = Geolocator.distanceBetween(
-      _userLocation!.latitude,
-      _userLocation!.longitude,
-      store.lat!,
-      store.lng!,
-    );
-
-    if (distanceInMeters < 1000) {
-      return '${distanceInMeters.round()} м от вас';
-    } else {
-      return '${(distanceInMeters / 1000).toStringAsFixed(1)} км от вас';
-    }
-  }
-
-  Widget _buildInfoRow(IconData icon, String text, {bool isLink = false}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          icon,
-          size: 18,
-          color: isLink ? AppColors.primary : AppColors.textSecondary,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: AppTextStyles.bodyMedium.copyWith(
-              color: isLink ? AppColors.primary : AppColors.textPrimary,
-            ),
-          ),
-        ),
-      ],
+  void _zoom(double delta) {
+    if (!_mapReady) return;
+    _mapController.move(
+      _mapController.camera.center,
+      _mapController.camera.zoom + delta,
     );
   }
 
   void _onMarkerTap(Store store) {
     setState(() => _selectedStore = store);
-    _mapController.move(
-      LatLng(store.lat!, store.lng!),
-      _mapController.camera.zoom,
-    );
-  }
-
-  Future<void> _callPhone(String phone) async {
-    final uri = Uri(scheme: 'tel', path: phone.replaceAll(' ', ''));
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
+    if (_mapReady) {
+      _mapController.move(
+        LatLng(store.lat!, store.lng!),
+        _mapController.camera.zoom,
+      );
     }
   }
 
-  Future<void> _openInMaps(Store store) async {
-    if (store.lat == null || store.lng == null) return;
+  void _close() =>
+      context.canPop() ? context.pop() : context.go('/stores');
 
-    // Try to open in Google Maps, fallback to browser
-    final googleMapsUrl = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=${store.lat},${store.lng}',
+  @override
+  Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: BlocBuilder<StoresBloc, StoresState>(
+        builder: (context, state) {
+          Widget body;
+          if (state is StoresError) {
+            body = LiquidBackground(
+              child: Center(
+                child: StoresStateMessage(
+                  icon: Icons.cloud_off_rounded,
+                  color: AppColors.error,
+                  title: 'Не удалось загрузить',
+                  message: state.message,
+                  action: GlassButton(
+                    label: 'Повторить',
+                    icon: Icons.refresh_rounded,
+                    onTap: () =>
+                        context.read<StoresBloc>().add(const LoadStores()),
+                  ),
+                ),
+              ),
+            );
+          } else if (state is StoresLoaded) {
+            body = _buildMap(state.stores);
+          } else {
+            body = const LiquidBackground(
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
+            );
+          }
+
+          return Stack(
+            children: [
+              Positioned.fill(child: body),
+              // Top controls: back, title capsule, back-to-list.
+              Positioned(
+                top: topInset + 6,
+                left: 12,
+                right: 12,
+                child: Row(
+                  children: [
+                    GlassIconButton(
+                      icon: Icons.arrow_back_ios_new_rounded,
+                      iconSize: 19,
+                      style: GlassStyle.clear,
+                      tooltip: 'Назад',
+                      onTap: _close,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Center(
+                        child: LiquidGlass.capsule(
+                          style: GlassStyle.clear,
+                          height: 44,
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          child: Center(
+                            widthFactor: 1,
+                            child: Text(
+                              'Карта магазинов',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.heading3.copyWith(
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GlassIconButton(
+                      icon: Icons.format_list_bulleted_rounded,
+                      style: GlassStyle.clear,
+                      tooltip: 'Список магазинов',
+                      onTap: _close,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
+  }
 
-    if (await canLaunchUrl(googleMapsUrl)) {
-      await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
-    }
+  Widget _buildMap(List<Store> stores) {
+    final topInset = MediaQuery.paddingOf(context).top;
+    final storesWithCoords =
+        stores.where((s) => s.lat != null && s.lng != null).toList();
+    final bottom = GlassTabBarMetrics.clearance(context) - 8;
+    final showLocationError = _locationError != null && _userLocation == null;
+
+    return Stack(
+      children: [
+        FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: _userLocation ??
+                (storesWithCoords.isNotEmpty
+                    ? LatLng(
+                        storesWithCoords.first.lat!,
+                        storesWithCoords.first.lng!,
+                      )
+                    : _defaultCenter),
+            initialZoom: _defaultZoom,
+            onMapReady: () => _mapReady = true,
+            onTap: (_, _) => setState(() => _selectedStore = null),
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.shirin.app',
+            ),
+            MarkerLayer(
+              markers: [
+                if (_userLocation != null)
+                  Marker(
+                    point: _userLocation!,
+                    width: 36,
+                    height: 36,
+                    child: const UserLocationMarker(),
+                  ),
+                ...storesWithCoords.map((store) {
+                  return Marker(
+                    point: LatLng(store.lat!, store.lng!),
+                    width: 60,
+                    height: 60,
+                    child: StoreMapMarker(
+                      selected: _selectedStore?.id == store.id,
+                      onTap: () => _onMarkerTap(store),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ],
+        ),
+
+        // Status bar scrim.
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: topInset + 72,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.white.withValues(alpha: 0.7),
+                    Colors.white.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Location problem banner.
+        if (showLocationError)
+          Positioned(
+            top: topInset + 62,
+            left: 16,
+            right: 72,
+            child: LiquidGlass.capsule(
+              style: GlassStyle.thick,
+              padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.location_off_rounded,
+                    color: AppColors.warning,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _locationError!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _getCurrentLocation,
+                    tooltip: 'Повторить',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(
+                      Icons.refresh_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // Map controls.
+        Positioned(
+          right: 16,
+          top: topInset + 62,
+          child: MapGlassControls(
+            locating: _isLoadingLocation,
+            locationError: showLocationError,
+            onLocate: _centerOnUserLocation,
+            onZoomIn: () => _zoom(1),
+            onZoomOut: () => _zoom(-1),
+          ),
+        ),
+
+        // Selected store card.
+        Positioned(
+          left: 16,
+          right: 16,
+          bottom: bottom,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 320),
+            switchInCurve: Curves.easeOutBack,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: SlideTransition(
+                position: Tween(
+                  begin: const Offset(0, 0.15),
+                  end: Offset.zero,
+                ).animate(anim),
+                child: child,
+              ),
+            ),
+            child: _selectedStore == null
+                ? const SizedBox.shrink()
+                : SelectedStoreCard(
+                    key: ValueKey(_selectedStore!.id),
+                    store: _selectedStore!,
+                    distance: storeDistanceText(_userLocation, _selectedStore!),
+                    onClose: () => setState(() => _selectedStore = null),
+                    onDetails: () => context.push(
+                      '/stores/${_selectedStore!.id}',
+                      extra: _selectedStore,
+                    ),
+                  ),
+          ),
+        ),
+      ],
+    );
   }
 }

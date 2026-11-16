@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 Shirin App is a mobile application system for "Ширин" confectionery, consisting of three components:
-- **Backend**: NestJS API with PostgreSQL, Prisma, Redis, MinIO
+- **Backend**: NestJS API with PostgreSQL, Prisma, Redis, SeaweedFS (S3)
 - **Mobile**: Flutter app with BLoC state management and Clean Architecture
 - **Admin Dashboard**: React with TypeScript, Zustand, TanStack Query, Tailwind CSS
 
@@ -33,7 +33,7 @@ shirin-app/
 │   │   ├── loyalty/        # Loyalty program
 │   │   ├── promotions/     # Promotions/offers
 │   │   ├── stores/         # Store locations
-│   │   ├── storage/        # MinIO integration
+│   │   ├── storage/        # S3 storage (SeaweedFS)
 │   │   ├── chat/           # WebSocket chat
 │   │   └── notifications/  # Push notifications
 │   └── prisma/schema.prisma
@@ -65,7 +65,8 @@ npx prisma db seed            # Seed database
 ```bash
 cd mobile
 flutter pub get               # Install dependencies
-flutter run                   # Run on device/emulator
+scripts/sim.sh run            # Run on the dedicated iOS simulator (see below)
+scripts/sim.sh drive          # Screenshot integration test on it
 flutter test                  # Widget tests
 flutter test integration_test/ # Integration tests
 flutter build appbundle --release  # Android release
@@ -87,6 +88,13 @@ docker-compose up -d          # Start all services
 docker-compose logs -f backend # View backend logs
 docker-compose down           # Stop all services
 ```
+
+### iOS simulator: one simulator per app
+Other projects on this Mac use their own simulators (e.g. "Halal Check iPhone 17",
+AgymTech on the stock iPhone 18 Pro / Pro Max). Shirin runs **only** on
+**"Shirin iPhone 18 Pro"** — `mobile/scripts/sim.sh` finds it by name, creates
+it if missing and boots it. Never pass another simulator's id to `flutter run`
+/ `flutter drive`, and don't install, uninstall or shut down other apps' simulators.
 
 ## Architecture Patterns
 
@@ -133,6 +141,6 @@ Database fields with translations follow the pattern:
 - Backend API: `http://localhost:3000/api/v1`
 - Swagger Docs: `http://localhost:3000/api/docs`
 - Admin Dashboard: `http://localhost:3001`
-- MinIO Console: `http://localhost:9001`
+- SeaweedFS S3 API: `http://localhost:8333` (bucket `shirin` is publicly readable)
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6379`

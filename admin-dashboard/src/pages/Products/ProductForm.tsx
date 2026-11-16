@@ -5,7 +5,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Header from '../../components/layout/Header';
 import { Category } from '../../types';
-import { getMockCategories, getMockProducts, isTestMode } from '../../services/mockData';
 import api from '../../services/api';
 
 const productSchema = z.object({
@@ -43,34 +42,25 @@ const ProductForm: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        if (isTestMode()) {
-          setCategories(getMockCategories());
-          if (isEdit) {
-            const product = getMockProducts().find((p) => p.id === id);
-            if (product) {
-              reset({
-                nameRu: product.nameRu,
-                nameKy: product.nameKy || '',
-                descriptionRu: product.descriptionRu || '',
-                descriptionKy: product.descriptionKy || '',
-                price: product.price,
-                categoryId: product.categoryId,
-                isAvailable: product.isAvailable,
-              });
-            }
-          }
-        } else {
-          const [catRes, prodRes] = await Promise.all([
-            api.get('/products/categories'),
-            isEdit ? api.get(`/products/${id}`) : Promise.resolve(null),
-          ]);
-          setCategories(catRes.data);
-          if (prodRes?.data) {
-            reset(prodRes.data);
-          }
+        const [catRes, prodRes] = await Promise.all([
+          api.get<Category[]>('/products/categories'),
+          isEdit ? api.get(`/products/${id}`) : Promise.resolve(null),
+        ]);
+        setCategories(catRes.data);
+        const product = prodRes?.data;
+        if (product) {
+          reset({
+            nameRu: product.nameRu || product.name,
+            nameKy: product.nameKy || '',
+            descriptionRu: product.descriptionRu || '',
+            descriptionKy: product.descriptionKy || '',
+            price: Number(product.price),
+            categoryId: product.categoryId,
+            isAvailable: product.isAvailable,
+          });
         }
       } catch {
-        setCategories(getMockCategories());
+        alert('Не удалось загрузить данные товара');
       }
     };
     fetchData();
@@ -79,12 +69,12 @@ const ProductForm: React.FC = () => {
   const onSubmit = async (data: ProductFormData) => {
     setLoading(true);
     try {
-      if (!isTestMode()) {
-        if (isEdit) {
-          await api.put(`/products/${id}`, data);
-        } else {
-          await api.post('/products', data);
-        }
+      // Backend requires the base `name`; Russian is the primary language
+      const payload = { ...data, name: data.nameRu };
+      if (isEdit) {
+        await api.patch(`/products/${id}`, payload);
+      } else {
+        await api.post('/products', payload);
       }
       navigate('/products');
     } catch {

@@ -5,12 +5,19 @@ import {
   Patch,
   Body,
   Param,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiParam,
+} from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -39,7 +46,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Get order details' })
   @ApiParam({ name: 'id', description: 'Order ID' })
   findOne(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.ordersService.findOne(user.id, id);
+    return this.ordersService.findOne(user.id, id, user.role === 'ADMIN');
   }
 
   @Patch(':id/cancel')
@@ -63,8 +70,7 @@ export class OrdersController {
   @UseGuards(RolesGuard)
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Get all orders (Admin)' })
-  async findAllAdmin() {
-    // TODO: Implement admin order list with pagination and filters
-    return [];
+  findAllAdmin(@Query() query: QueryAdminOrdersDto) {
+    return this.ordersService.findAllAdmin(query);
   }
 }

@@ -42,7 +42,15 @@ class AuthInterceptor extends Interceptor {
     handler.next(err);
   }
 
-  Future<bool> _refreshToken() async {
+  // Refresh tokens are single-use (rotated by the server), so concurrent
+  // 401s must share one refresh instead of each spending the same token.
+  Future<bool>? _refreshing;
+
+  Future<bool> _refreshToken() {
+    return _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
+  }
+
+  Future<bool> _doRefresh() async {
     try {
       final refreshToken = await _storageService.getRefreshToken();
       if (refreshToken == null) return false;
