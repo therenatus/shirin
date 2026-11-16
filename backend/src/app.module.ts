@@ -17,6 +17,7 @@ import { OrdersModule } from './orders/orders.module';
 import { PromotionsModule } from './promotions/promotions.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { IntegrationModule } from './integration/integration.module';
+import { SettingsModule } from './settings/settings.module';
 import databaseConfig from './config/database.config';
 import jwtConfig from './config/jwt.config';
 import storageConfig from './config/storage.config';
@@ -49,6 +50,7 @@ import redisConfig from './config/redis.config';
     OrdersModule,
     PromotionsModule,
     LoyaltyModule,
+    SettingsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
