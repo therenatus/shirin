@@ -73,6 +73,16 @@ async function main() {
       { key: 'support_email', value: 'support@shirin.kg', description: 'Email поддержки' },
       { key: 'work_hours', value: '09:00-21:00', description: 'Часы работы' },
       {
+        key: 'loyalty_max_receipt_amount',
+        value: '50000',
+        description: 'Макс. сумма чека для начисления баллов на кассе, сом',
+      },
+      {
+        key: 'loyalty_daily_earn_limit',
+        value: '2000',
+        description: 'Макс. баллов, начисляемых клиенту на кассе за сутки',
+      },
+      {
         key: 'catalog_master',
         value: 'APP',
         description: 'Кто ведёт цены и наличие: APP (админка) или ONE_C (1С)',
@@ -107,6 +117,23 @@ async function main() {
     },
   });
   console.log('Users created:', admin.phone, testUser.phone);
+
+  // Ledger must sum to the balance: record the seeded points as opening balance
+  const hasLedger = await prisma.loyaltyTransaction.count({
+    where: { userId: testUser.id },
+  });
+  if (!hasLedger && testUser.loyaltyPoints > 0) {
+    await prisma.loyaltyTransaction.create({
+      data: {
+        userId: testUser.id,
+        type: 'ADJUST',
+        source: 'MANUAL',
+        points: testUser.loyaltyPoints,
+        balanceAfter: testUser.loyaltyPoints,
+        description: 'Начальный остаток',
+      },
+    });
+  }
 
   // Create categories
   await Promise.all([
@@ -960,7 +987,7 @@ async function main() {
   console.log('   - 3 stores');
   console.log('   - 3 promotions');
   console.log('   - 1 raffle');
-  console.log('   - 10 settings');
+  console.log('   - 12 settings');
   console.log('   - 3 users (admin, test client, store staff)');
 }
 

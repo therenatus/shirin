@@ -98,6 +98,7 @@ describe('OrdersService', () => {
     };
     loyalty = {
       addPunch: jest.fn(),
+      applyPoints: jest.fn().mockResolvedValue({ id: 'tx', balanceAfter: 0 }),
       getSettings: jest.fn().mockResolvedValue({
         cashbackPercent: 5,
         maxPointsUsePercent: 30,
@@ -113,16 +114,21 @@ describe('OrdersService', () => {
   describe('updateStatus', () => {
     it('awards points and punches exactly once on DELIVERED', async () => {
       await service.updateStatus(ADMIN, 'order-1', OrderStatus.DELIVERED);
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-        data: { loyaltyPoints: { increment: 50 } },
-      });
+      expect(loyalty.applyPoints).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          userId: 'user-1',
+          type: 'EARN',
+          points: 50,
+          orderId: 'order-1',
+        }),
+      );
       expect(loyalty.addPunch).toHaveBeenCalledWith(prisma, 'user-1', 'M', 2);
 
       await expect(
         service.updateStatus(ADMIN, 'order-1', OrderStatus.DELIVERED),
       ).rejects.toBeInstanceOf(BadRequestException);
-      expect(prisma.user.update).toHaveBeenCalledTimes(1);
+      expect(loyalty.applyPoints).toHaveBeenCalledTimes(1);
       expect(loyalty.addPunch).toHaveBeenCalledTimes(1);
     });
 
@@ -131,17 +137,17 @@ describe('OrdersService', () => {
       await expect(
         service.updateStatus(ADMIN, 'order-1', OrderStatus.DELIVERED),
       ).rejects.toMatchObject({ status: 409 });
-      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(loyalty.applyPoints).not.toHaveBeenCalled();
       expect(loyalty.addPunch).not.toHaveBeenCalled();
     });
 
     it('refunds used points when admin cancels', async () => {
       order = makeOrder({ status: OrderStatus.CONFIRMED, pointsUsed: 120 });
       await service.updateStatus(ADMIN, 'order-1', OrderStatus.CANCELLED);
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-        data: { loyaltyPoints: { increment: 120 } },
-      });
+      expect(loyalty.applyPoints).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ type: 'REFUND', points: 120 }),
+      );
     });
 
     it('records a status change event in the same transaction', async () => {
@@ -256,10 +262,10 @@ describe('OrdersService', () => {
       order = makeOrder({ status: OrderStatus.PENDING, pointsUsed: 80 });
       const result = await service.cancel('user-1', 'order-1');
       expect(result.status).toBe(OrderStatus.CANCELLED);
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-        data: { loyaltyPoints: { increment: 80 } },
-      });
+      expect(loyalty.applyPoints).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ type: 'REFUND', points: 80 }),
+      );
     });
 
     it('does not refund when the order is already being prepared', async () => {
@@ -267,7 +273,7 @@ describe('OrdersService', () => {
       await expect(service.cancel('user-1', 'order-1')).rejects.toBeInstanceOf(
         BadRequestException,
       );
-      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(loyalty.applyPoints).not.toHaveBeenCalled();
     });
   });
 
@@ -295,12 +301,19 @@ describe('OrdersService', () => {
       expect(data.items.create[0].quantity).toBe(3);
       expect(data.pointsUsed).toBe(299);
       expect(Number(data.total)).toBe(700);
-      expect(data.pointsEarned).toBe(49);
+      // cashback only on the 700 paid with money: 5% -> 35
+      expect(data.pointsEarned).toBe(35);
+      expect(loyalty.applyPoints).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ type: 'REDEEM', points: -299 }),
+      );
       expect(data.orderNumber).toMatch(/^SHR-\d{8}-0007$/);
     });
 
     it('fails when the user does not have enough points', async () => {
-      prisma.user.updateMany.mockResolvedValueOnce({ count: 0 });
+      loyalty.applyPoints.mockRejectedValueOnce(
+        new BadRequestException('Not enough loyalty points'),
+      );
       await expect(
         service.create('user-1', {
           deliveryType: DeliveryType.PICKUP,

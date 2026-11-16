@@ -9,7 +9,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { CreateOrderDto, DeliveryType } from './dto/create-order.dto';
 import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
-import { OrderStatus, Prisma, CoffeeSize, UserRole } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import {
+  OrderStatus,
+  Prisma,
+  CoffeeSize,
+  UserRole,
+  LoyaltyTxSource,
+  LoyaltyTxType,
+} from '@prisma/client';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { IntegrationEventsService } from '../integration/integration-events.service';
 import { AuthUser } from '../auth/types/auth-user';
@@ -157,8 +165,10 @@ export class OrdersService {
 
     const total = subtotal.add(deliveryFee).sub(pointsDiscount);
 
-    // Points to earn are based on subtotal, awarded on delivery
+    // Cashback only on the part paid with money (not with points);
+    // awarded on delivery
     const pointsEarned = subtotal
+      .sub(pointsDiscount)
       .mul(settings.cashbackPercent)
       .div(100)
       .floor()
@@ -166,20 +176,24 @@ export class OrdersService {
 
     const orderNumber = await this.generateOrderNumber();
 
+    const orderId = randomUUID();
+
     const order = await this.prisma.$transaction(async (tx) => {
       if (pointsToUse > 0) {
-        // Conditional decrement prevents spending the same points twice
-        const { count } = await tx.user.updateMany({
-          where: { id: userId, loyaltyPoints: { gte: pointsToUse } },
-          data: { loyaltyPoints: { decrement: pointsToUse } },
+        // Debit first: fails without creating the order if points are short
+        await this.loyaltyService.applyPoints(tx, {
+          userId,
+          type: LoyaltyTxType.REDEEM,
+          source: LoyaltyTxSource.APP_ORDER,
+          points: -pointsToUse,
+          description: `Списание за заказ ${orderNumber}`,
+          storeId: dto.storeId,
         });
-        if (count === 0) {
-          throw new BadRequestException('Not enough loyalty points');
-        }
       }
 
       const created = await tx.order.create({
         data: {
+          id: orderId,
           orderNumber,
           userId,
           addressId: dto.addressId,
@@ -322,10 +336,7 @@ export class OrdersService {
       await this.recordStatusChange(tx, order, OrderStatus.CANCELLED, userId);
 
       if (order.pointsUsed > 0) {
-        await tx.user.update({
-          where: { id: userId },
-          data: { loyaltyPoints: { increment: order.pointsUsed } },
-        });
+        await this.refundPoints(tx, order);
       }
 
       return tx.order.findUniqueOrThrow({
@@ -397,19 +408,22 @@ export class OrdersService {
 
       if (status === OrderStatus.DELIVERED) {
         if (order.pointsEarned > 0) {
-          await tx.user.update({
-            where: { id: order.userId },
-            data: { loyaltyPoints: { increment: order.pointsEarned } },
+          await this.loyaltyService.applyPoints(tx, {
+            userId: order.userId,
+            type: LoyaltyTxType.EARN,
+            source: LoyaltyTxSource.APP_ORDER,
+            points: order.pointsEarned,
+            description: `Кешбэк за заказ ${order.orderNumber}`,
+            orderId: order.id,
+            storeId: order.storeId,
+            staffId: actor.id,
           });
         }
         await this.processCoffeePunchCards(tx, order.userId, order.items);
       }
 
       if (status === OrderStatus.CANCELLED && order.pointsUsed > 0) {
-        await tx.user.update({
-          where: { id: order.userId },
-          data: { loyaltyPoints: { increment: order.pointsUsed } },
-        });
+        await this.refundPoints(tx, order, actor.id);
       }
 
       return tx.order.findUniqueOrThrow({
@@ -456,6 +470,29 @@ export class OrdersService {
     });
 
     return this.formatOrder(updated);
+  }
+
+  private refundPoints(
+    tx: Prisma.TransactionClient,
+    order: {
+      id: string;
+      userId: string;
+      orderNumber: string;
+      pointsUsed: number;
+      storeId: string | null;
+    },
+    staffId?: string,
+  ) {
+    return this.loyaltyService.applyPoints(tx, {
+      userId: order.userId,
+      type: LoyaltyTxType.REFUND,
+      source: LoyaltyTxSource.APP_ORDER,
+      points: order.pointsUsed,
+      description: `Возврат баллов за заказ ${order.orderNumber}`,
+      orderId: order.id,
+      storeId: order.storeId,
+      staffId,
+    });
   }
 
   /** Admins manage every order; store staff only orders of their store. */

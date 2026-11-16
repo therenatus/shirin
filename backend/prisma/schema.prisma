@@ -62,14 +62,16 @@ model User {
   lastLoginAt DateTime?
 
   // Relations
-  orders        Order[]
-  addresses     Address[]
-  favorites     Favorite[]
-  reviews       Review[]
-  notifications Notification[]
-  chatMessages  ChatMessage[]
-  raffleEntries RaffleEntry[]
-  punchCards    CoffeePunchCard[]
+  orders                   Order[]
+  addresses                Address[]
+  favorites                Favorite[]
+  reviews                  Review[]
+  notifications            Notification[]
+  chatMessages             ChatMessage[]
+  raffleEntries            RaffleEntry[]
+  punchCards               CoffeePunchCard[]
+  loyaltyTransactions      LoyaltyTransaction[] @relation("LoyaltyCustomer")
+  loyaltyStaffTransactions LoyaltyTransaction[] @relation("LoyaltyStaff")
 
   @@map("users")
 }
@@ -144,8 +146,9 @@ model Store {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  orders Order[]
-  staff  User[]  @relation("StoreStaff")
+  orders              Order[]
+  staff               User[]               @relation("StoreStaff")
+  loyaltyTransactions LoyaltyTransaction[]
 
   @@map("stores")
 }
@@ -205,7 +208,8 @@ model Order {
 
   // Store that fulfils the order: chosen by the client for pickup,
   // assigned by an admin for delivery
-  items OrderItem[]
+  items               OrderItem[]
+  loyaltyTransactions LoyaltyTransaction[]
 
   @@index([storeId, status, createdAt])
   @@index([updatedAt])
@@ -432,4 +436,60 @@ model IntegrationEvent {
 
   @@index([type, id])
   @@map("integration_events")
+}
+
+enum LoyaltyTxType {
+  EARN // cashback credited
+  REDEEM // points spent
+  REFUND // spent points returned (order cancelled)
+  ADJUST // manual correction or opening balance
+  REVERSAL // cancels an earlier transaction
+  FREE_COFFEE // punch card reward given out (no points change)
+}
+
+enum LoyaltyTxSource {
+  APP_ORDER // order placed in the mobile app
+  IN_STORE // cashier in a store
+  ONE_C // imported from 1C
+  MANUAL // admin
+}
+
+// Ledger of every loyalty points change. User.loyaltyPoints always equals
+// the sum of `points` for the user; both are changed in one transaction.
+model LoyaltyTransaction {
+  id           String          @id @default(uuid())
+  type         LoyaltyTxType
+  source       LoyaltyTxSource
+  points       Int // signed: + credited, - debited
+  balanceAfter Int? // null only for rows backfilled from old orders
+  description  String?
+
+  userId String
+  user   User   @relation("LoyaltyCustomer", fields: [userId], references: [id], onDelete: Cascade)
+
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
+
+  staffId String?
+  staff   User?   @relation("LoyaltyStaff", fields: [staffId], references: [id])
+
+  // Cash desk receipt; one receipt can be credited once and debited once per store
+  receiptNumber String?
+  receiptAmount Decimal? @db.Decimal(10, 2)
+
+  reversalOfId String?             @unique
+  reversalOf   LoyaltyTransaction? @relation("Reversal", fields: [reversalOfId], references: [id])
+  reversedBy   LoyaltyTransaction? @relation("Reversal")
+
+  externalId String?  @unique
+  createdAt  DateTime @default(now())
+
+  @@unique([storeId, receiptNumber, type])
+  @@index([userId, createdAt])
+  @@index([storeId, createdAt])
+  @@index([staffId, createdAt])
+  @@map("loyalty_transactions")
 }

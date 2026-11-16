@@ -4,7 +4,8 @@ import { Prisma } from '@prisma/client';
 export type IntegrationEventType =
   | 'order.created'
   | 'order.status_changed'
-  | 'order.store_assigned';
+  | 'order.store_assigned'
+  | 'loyalty.transaction';
 
 /**
  * Outbox for external systems (1C and others).
