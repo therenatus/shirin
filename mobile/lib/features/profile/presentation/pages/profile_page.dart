@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/constants/api_endpoints.dart';
+import '../../../auth/domain/usecases/delete_account.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/di/injection_container.dart';
@@ -174,6 +177,27 @@ class ProfilePage extends StatelessWidget {
                       _SettingsGroup(
                         items: [
                           _SettingsEntry(
+                            Icons.privacy_tip_rounded,
+                            'Политика конфиденциальности',
+                            AppColors.textSecondary,
+                            () => launchUrl(
+                              Uri.parse(ApiEndpoints.privacyUrl),
+                              mode: LaunchMode.inAppBrowserView,
+                            ),
+                          ),
+                          _SettingsEntry(
+                            Icons.person_remove_rounded,
+                            'Удалить аккаунт',
+                            AppColors.error,
+                            () => _confirmDeleteAccount(context),
+                            destructive: true,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _SettingsGroup(
+                        items: [
+                          _SettingsEntry(
                             Icons.logout_rounded,
                             'Выйти из аккаунта',
                             AppColors.error,
@@ -260,6 +284,113 @@ class ProfilePage extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Two-step confirmation: what is deleted, then the deletion itself.
+void _confirmDeleteAccount(BuildContext context) {
+  HapticFeedback.mediumImpact();
+  showGlassSheet<void>(
+    context: context,
+    builder: (ctx) => _DeleteAccountSheet(parentContext: context),
+  );
+}
+
+class _DeleteAccountSheet extends StatefulWidget {
+  final BuildContext parentContext;
+  const _DeleteAccountSheet({required this.parentContext});
+
+  @override
+  State<_DeleteAccountSheet> createState() => _DeleteAccountSheetState();
+}
+
+class _DeleteAccountSheetState extends State<_DeleteAccountSheet> {
+  bool _busy = false;
+
+  Future<void> _delete() async {
+    setState(() => _busy = true);
+    final result = await sl<DeleteAccount>()();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    result.fold(
+      (failure) => showGlassToast(context, failure.message,
+          icon: Icons.error_outline_rounded),
+      (_) {
+        Navigator.pop(context);
+        final parent = widget.parentContext;
+        if (parent.mounted) {
+          // Clears local state; the server session is already gone
+          parent.read<AuthBloc>().add(const LogoutRequested());
+          showGlassToast(parent, 'Аккаунт удалён', icon: Icons.check_rounded);
+        }
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.person_remove_rounded,
+                size: 28, color: AppColors.error),
+          ),
+          const SizedBox(height: 16),
+          Text('Удалить аккаунт?', style: AppTextStyles.heading2),
+          const SizedBox(height: 8),
+          Text(
+            'Удалятся имя, номер телефона, адреса и все бонусные баллы. '
+            'Восстановить их будет нельзя. История заказов сохранится '
+            'у нас без связи с вами — это нужно для учёта.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodySmall,
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: GlassButton(
+                  label: 'Отмена',
+                  expanded: true,
+                  onTap: _busy ? null : () => Navigator.pop(context),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: LiquidGlass.capsule(
+                  height: 54,
+                  style: GlassStyle.regular.copyWith(
+                    tint: AppColors.error.withValues(alpha: 0.9),
+                    shadowColor: AppColors.error,
+                    foreground: Colors.white,
+                  ),
+                  onTap: _busy ? null : _delete,
+                  child: Center(
+                    child: _busy
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.5, color: Colors.white),
+                          )
+                        : Text('Удалить', style: AppTextStyles.button),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

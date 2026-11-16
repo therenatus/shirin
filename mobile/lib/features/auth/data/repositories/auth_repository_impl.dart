@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:dartz/dartz.dart';
 import '../../../../core/error/exceptions.dart';
 import '../../../../core/error/failures.dart';
@@ -17,9 +18,11 @@ class AuthRepositoryImpl implements AuthRepository {
 
   AuthRepositoryImpl(this._remoteDatasource, this._localDatasource);
 
-  bool _isTestPhone(String phone) => phone == _testPhone;
+  /// Offline demo login, debug builds only: never ships in a release.
+  bool _isTestPhone(String phone) => kDebugMode && phone == _testPhone;
 
   Future<bool> get _isTestMode async {
+    if (!kDebugMode) return false;
     final token = await _localDatasource.getAccessToken();
     return token == 'test-access-token';
   }
@@ -141,6 +144,34 @@ class AuthRepositoryImpl implements AuthRepository {
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
+  }
+
+  @override
+  Future<Either<Failure, void>> deleteAccount() async {
+    if (await _isTestMode) {
+      return const Left(ServerFailure('Недоступно в тестовом режиме'));
+    }
+    try {
+      await _remoteDatasource.deleteAccount();
+    } on NetworkException {
+      return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
+    } on ServerException catch (e) {
+      return Left(ServerFailure(_deleteErrorText(e.message)));
+    }
+    await _localDatasource.clearCache();
+    return const Right(null);
+  }
+
+  static String _deleteErrorText(String message) {
+    if (message.contains('active orders')) {
+      return 'У вас есть незавершённые заказы. Дождитесь их выполнения или отмените их.';
+    }
+    if (message.contains('Employee')) {
+      return 'Аккаунт сотрудника удаляет администратор.';
+    }
+    return message;
   }
 
   @override

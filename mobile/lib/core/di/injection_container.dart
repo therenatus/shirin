@@ -8,6 +8,7 @@ import '../../features/auth/data/repositories/auth_repository_impl.dart';
 import '../../features/auth/domain/repositories/auth_repository.dart';
 import '../../features/auth/domain/usecases/get_current_user.dart';
 import '../../features/auth/domain/usecases/logout.dart';
+import '../../features/auth/domain/usecases/delete_account.dart';
 import '../../features/auth/domain/usecases/send_code.dart';
 import '../../features/auth/domain/usecases/verify_code.dart';
 import '../../features/auth/presentation/bloc/auth_bloc.dart';
@@ -98,6 +99,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => GetCurrentUser(sl()));
   sl.registerLazySingleton(() => UpdateProfile(sl()));
   sl.registerLazySingleton(() => Logout(sl()));
+  sl.registerLazySingleton(() => DeleteAccount(sl()));
 
   // Auth - BLoC
   sl.registerFactory(

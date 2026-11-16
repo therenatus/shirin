@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/constants/api_endpoints.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
@@ -467,21 +469,30 @@ class _TermsNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Text.rich(
-        TextSpan(
-          style: AppTextStyles.caption.copyWith(color: AppColors.textLight),
-          children: [
-            const TextSpan(text: 'Нажимая «Получить код», вы соглашаетесь\nс '),
-            TextSpan(
-              text: 'условиями использования',
-              style: AppTextStyles.caption.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => launchUrl(
+          Uri.parse(ApiEndpoints.privacyUrl),
+          mode: LaunchMode.inAppBrowserView,
         ),
-        textAlign: TextAlign.center,
+        child: Text.rich(
+          TextSpan(
+            style: AppTextStyles.caption.copyWith(color: AppColors.textLight),
+            children: [
+              const TextSpan(
+                  text: 'Нажимая «Получить код», вы соглашаетесь\nс '),
+              TextSpan(
+                text: 'политикой конфиденциальности',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ],
+          ),
+          textAlign: TextAlign.center,
+        ),
       ),
     );
   }

@@ -9,4 +9,7 @@ abstract class AuthRepository {
   Future<Either<Failure, User>> getCurrentUser();
   Future<Either<Failure, User>> updateProfile(UpdateProfileParams params);
   Future<Either<Failure, void>> logout();
+
+  /// Deletes the account on the server and signs out on this device.
+  Future<Either<Failure, void>> deleteAccount();
 }

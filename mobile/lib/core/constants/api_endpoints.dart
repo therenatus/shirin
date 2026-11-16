@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 class ApiEndpoints {
   ApiEndpoints._();
 
@@ -9,11 +11,21 @@ class ApiEndpoints {
     if (_envUrl.isNotEmpty) {
       return _envUrl;
     }
+    // A release build pointing at localhost would silently not work
+    if (kReleaseMode) {
+      throw StateError(
+        'API_URL is not set: build with --dart-define=API_URL=https://...',
+      );
+    }
     if (Platform.isAndroid) {
       return 'http://10.0.2.2:3000/api/v1';
     }
     return 'http://localhost:3000/api/v1';
   }
+
+  /// Privacy policy page served by the backend at the site root.
+  static String get privacyUrl =>
+      '${baseUrl.replaceFirst(RegExp(r'/api/v1/?$'), '')}/privacy';
 
   // Auth
   static const String sendCode = '/auth/send-code';

@@ -10,6 +10,7 @@ abstract class AuthRemoteDatasource {
   Future<UserModel> getCurrentUser();
   Future<UserModel> updateProfile(UpdateProfileParams params);
   Future<void> logout(String? refreshToken);
+  Future<void> deleteAccount();
 }
 
 class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
@@ -53,5 +54,10 @@ class AuthRemoteDatasourceImpl implements AuthRemoteDatasource {
       ApiEndpoints.logout,
       data: refreshToken != null ? {'refreshToken': refreshToken} : null,
     );
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    await _apiClient.delete(ApiEndpoints.userProfile);
   }
 }
