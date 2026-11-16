@@ -1,5 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsNumber, IsEnum, IsUUID } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  IsEnum,
+  IsUUID,
+  Min,
+  Max,
+} from 'class-validator';
 import { Transform } from 'class-transformer';
 import { parseBool } from '../../common/parse-bool';
 
@@ -31,12 +39,15 @@ export class QueryProductsDto {
   @ApiPropertyOptional({ default: 1 })
   @Transform(({ value }) => parseInt(value, 10))
   @IsNumber()
+  @Min(1)
   @IsOptional()
   page?: number = 1;
 
-  @ApiPropertyOptional({ default: 20 })
+  @ApiPropertyOptional({ default: 20, maximum: 100 })
   @Transform(({ value }) => parseInt(value, 10))
   @IsNumber()
+  @Min(1)
+  @Max(100)
   @IsOptional()
   limit?: number = 20;
 

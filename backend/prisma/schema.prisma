@@ -72,6 +72,7 @@ model User {
   punchCards               CoffeePunchCard[]
   loyaltyTransactions      LoyaltyTransaction[] @relation("LoyaltyCustomer")
   loyaltyStaffTransactions LoyaltyTransaction[] @relation("LoyaltyStaff")
+  confirmedPayments        Payment[]            @relation("PaymentConfirmedBy")
 
   @@map("users")
 }
@@ -115,8 +116,17 @@ model Product {
   sortOrder     Int         @default(0)
   coffeeSize    CoffeeSize? // For punch card tracking (S/M/L)
   externalId    String?     @unique
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+
+  // Made to order (custom cakes)
+  isPreorder          Boolean  @default(false) // only by order, with lead time
+  leadTimeHours       Int      @default(0) // earliest ready time = now + this
+  prepaymentPercent   Int      @default(0) // 0..100 of the item total
+  allowInscription    Boolean  @default(false)
+  allowReferencePhoto Boolean  @default(false)
+  // Hidden everywhere; kept because orders and 1C refer to it
+  isArchived          Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
@@ -188,6 +198,11 @@ model Order {
   total          Decimal @db.Decimal(10, 2)
   pointsEarned   Int     @default(0)
 
+  // Prepayment for made-to-order items
+  paymentStatus    PaymentStatus @default(NOT_REQUIRED)
+  prepaymentAmount Decimal       @default(0) @db.Decimal(10, 2)
+  paymentDueAt     DateTime? // unpaid order is cancelled after this
+
   deliveryType String
   deliveryTime DateTime?
   comment      String?
@@ -203,15 +218,17 @@ model Order {
   addressId String?
   address   Address? @relation(fields: [addressId], references: [id])
 
+  // Store that fulfils the order: chosen by the client for pickup,
+  // assigned by an admin for delivery
   storeId String?
   store   Store?  @relation(fields: [storeId], references: [id])
 
-  // Store that fulfils the order: chosen by the client for pickup,
-  // assigned by an admin for delivery
   items               OrderItem[]
   loyaltyTransactions LoyaltyTransaction[]
+  payments            Payment[]
 
   @@index([storeId, status, createdAt])
+  @@index([paymentStatus, paymentDueAt])
   @@index([updatedAt])
   @@map("orders")
 }
@@ -227,6 +244,11 @@ model OrderItem {
 
   productId String
   product   Product @relation(fields: [productId], references: [id])
+
+  // Customer wishes for made-to-order items
+  inscription       String?
+  wishes            String?
+  referencePhotoUrl String?
 
   @@map("order_items")
 }
@@ -492,4 +514,40 @@ model LoyaltyTransaction {
   @@index([storeId, createdAt])
   @@index([staffId, createdAt])
   @@map("loyalty_transactions")
+}
+
+enum PaymentStatus {
+  NOT_REQUIRED // nothing to prepay
+  PENDING // waiting for prepayment
+  PAID // prepayment received
+  REFUND_PENDING // paid order cancelled, money must be returned
+  REFUNDED
+}
+
+enum PaymentMethod {
+  MANUAL_QR // customer paid by the company's QR, confirmed by staff
+  CASH // paid in a store
+  BANK // online acquiring (confirmed by the bank's webhook)
+}
+
+// Money received or returned for an order. Manual confirmation now;
+// a bank integration adds rows from its webhook without other changes.
+model Payment {
+  id     String        @id @default(uuid())
+  amount Decimal       @db.Decimal(10, 2) // negative for a refund
+  method PaymentMethod
+  note   String?
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  confirmedById String?
+  confirmedBy   User?   @relation("PaymentConfirmedBy", fields: [confirmedById], references: [id])
+
+  // Transaction id at the bank / in 1C
+  externalId String?  @unique
+  createdAt  DateTime @default(now())
+
+  @@index([orderId])
+  @@map("payments")
 }

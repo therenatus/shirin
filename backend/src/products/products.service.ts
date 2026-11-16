@@ -8,7 +8,8 @@ import { Prisma } from '@prisma/client';
 export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(query: QueryProductsDto) {
+  /** Catalog. Customers see available products; admins also unavailable ones. */
+  async findAll(query: QueryProductsDto, opts: { admin?: boolean } = {}) {
     const {
       categoryId,
       search,
@@ -22,9 +23,9 @@ export class ProductsService {
       maxPrice,
     } = query;
 
-    const where: Prisma.ProductWhereInput = {
-      isAvailable: true,
-    };
+    const where: Prisma.ProductWhereInput = opts.admin
+      ? { isArchived: false }
+      : { isAvailable: true, isArchived: false };
 
     if (categoryId) {
       where.categoryId = categoryId;
@@ -153,7 +154,7 @@ export class ProductsService {
       },
     });
 
-    if (!product) {
+    if (!product || product.isArchived) {
       throw new NotFoundException('Product not found');
     }
 
@@ -177,7 +178,7 @@ export class ProductsService {
         _count: {
           select: {
             products: {
-              where: { isAvailable: true },
+              where: { isAvailable: true, isArchived: false },
             },
           },
         },
@@ -279,6 +280,11 @@ export class ProductsService {
         isBestseller: dto.isBestseller ?? false,
         sortOrder: dto.sortOrder ?? 0,
         categoryId: dto.categoryId,
+        isPreorder: dto.isPreorder ?? false,
+        leadTimeHours: dto.leadTimeHours ?? 0,
+        prepaymentPercent: dto.prepaymentPercent ?? 0,
+        allowInscription: dto.allowInscription ?? false,
+        allowReferencePhoto: dto.allowReferencePhoto ?? false,
       },
       include: {
         category: true,
@@ -307,7 +313,11 @@ export class ProductsService {
       throw new NotFoundException('Product not found');
     }
 
-    await this.prisma.product.delete({ where: { id } });
+    // Archived, not deleted: past orders, favorites and 1C refer to it
+    await this.prisma.product.update({
+      where: { id },
+      data: { isArchived: true, isAvailable: false },
+    });
     return { success: true };
   }
 }

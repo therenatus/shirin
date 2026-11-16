@@ -21,6 +21,9 @@ import { StorageService } from './storage.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Throttle } from '@nestjs/throttler';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthUser } from '../auth/types/auth-user';
 
 @ApiTags('Storage')
 @Controller('storage')
@@ -43,7 +46,8 @@ export class StorageController {
         },
         folder: {
           type: 'string',
-          description: 'Folder to upload to (products, promotions, stores, avatars)',
+          description:
+            'Folder to upload to (products, promotions, stores, avatars)',
         },
       },
     },
@@ -62,6 +66,34 @@ export class StorageController {
     @Query('folder') folder: string = 'uploads',
   ) {
     const url = await this.storageService.uploadFile(file, folder);
+    return { url };
+  }
+
+  @Post('reference-photo')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({
+    summary: 'Upload a reference photo for a custom cake (customer)',
+  })
+  async uploadReferencePhoto(
+    @CurrentUser() user: AuthUser,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 })],
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    const url = await this.storageService.uploadReferencePhoto(user.id, file);
     return { url };
   }
 }

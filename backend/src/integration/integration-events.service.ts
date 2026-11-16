@@ -5,6 +5,8 @@ export type IntegrationEventType =
   | 'order.created'
   | 'order.status_changed'
   | 'order.store_assigned'
+  | 'order.payment_confirmed'
+  | 'order.payment_refunded'
   | 'loyalty.transaction';
 
 /**

@@ -57,6 +57,7 @@ describe('OrdersService', () => {
   let redis: any;
   let order: any;
   let events: any;
+  let storage: any;
 
   beforeEach(() => {
     order = makeOrder();
@@ -80,6 +81,7 @@ describe('OrdersService', () => {
         create: jest.fn(async ({ data }: any) => ({
           ...makeOrder(),
           ...data,
+          id: 'new-order',
           items: [],
         })),
         findMany: jest.fn().mockResolvedValue([]),
@@ -102,13 +104,19 @@ describe('OrdersService', () => {
       getSettings: jest.fn().mockResolvedValue({
         cashbackPercent: 5,
         maxPointsUsePercent: 30,
+        prepaymentTimeoutMinutes: 60,
         deliveryFee: 100,
         freeDeliveryMinAmount: 1000,
       }),
     };
     redis = { incr: jest.fn().mockResolvedValue(7) };
     events = { record: jest.fn() };
-    service = new OrdersService(prisma, redis, loyalty, events);
+    storage = {
+      isReferencePhotoOf: jest.fn((url: string, userId: string) =>
+        url.includes(`/references/${userId}/`),
+      ),
+    };
+    service = new OrdersService(prisma, redis, loyalty, events, storage);
   });
 
   describe('updateStatus', () => {
@@ -322,7 +330,15 @@ describe('OrdersService', () => {
           pointsToUse: 50,
         }),
       ).rejects.toThrow('Not enough loyalty points');
-      expect(prisma.order.create).not.toHaveBeenCalled();
+      // The debit runs in the same transaction as the insert, so the order
+      // is rolled back; the ledger row is linked to the order
+      expect(loyalty.applyPoints).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          type: 'REDEEM',
+          orderId: expect.any(String),
+        }),
+      );
     });
 
     it("rejects someone else's address", async () => {
@@ -334,6 +350,125 @@ describe('OrdersService', () => {
           items: [{ productId: 'p1', quantity: 1 }],
         }),
       ).rejects.toThrow('Address not found');
+    });
+  });
+
+  describe('made-to-order items', () => {
+    const cake = {
+      id: 'cake',
+      name: 'Торт на заказ',
+      price: D(2500),
+      discountPrice: null,
+      isPreorder: true,
+      leadTimeHours: 48,
+      prepaymentPercent: 50,
+      allowInscription: true,
+      allowReferencePhoto: true,
+    };
+    const inHours = (h: number) =>
+      new Date(Date.now() + h * 3600_000).toISOString();
+
+    beforeEach(() => {
+      const catalog = [
+        cake,
+        { id: 'p1', name: 'Эклер', price: D(200), discountPrice: null },
+      ];
+      prisma.product.findMany.mockImplementation(async ({ where }: any) =>
+        catalog.filter((p) => where.id.in.includes(p.id)),
+      );
+    });
+
+    it('requires a time no earlier than the lead time', async () => {
+      const base = {
+        deliveryType: DeliveryType.PICKUP,
+        storeId: 's1',
+        items: [{ productId: 'cake', quantity: 1 }],
+      };
+      await expect(service.create('user-1', base)).rejects.toThrow(
+        'Choose the date and time',
+      );
+      await expect(
+        service.create('user-1', { ...base, deliveryTime: inHours(24) }),
+      ).rejects.toThrow('Earliest available time');
+    });
+
+    it('asks for 50% prepayment of the cake only and sets a deadline', async () => {
+      await service.create('user-1', {
+        deliveryType: DeliveryType.PICKUP,
+        storeId: 's1',
+        deliveryTime: inHours(49),
+        items: [
+          { productId: 'cake', quantity: 1, inscription: 'С днём рождения!' },
+          { productId: 'p1', quantity: 2 },
+        ],
+      });
+      const data = prisma.order.create.mock.calls[0][0].data;
+      expect(Number(data.prepaymentAmount)).toBe(1250);
+      expect(data.paymentStatus).toBe('PENDING');
+      expect(data.paymentDueAt).toBeInstanceOf(Date);
+      expect(data.items.create[0].inscription).toBe('С днём рождения!');
+    });
+
+    it('keeps customised lines of the same product separate', async () => {
+      await service.create('user-1', {
+        deliveryType: DeliveryType.PICKUP,
+        storeId: 's1',
+        deliveryTime: inHours(49),
+        items: [
+          { productId: 'cake', quantity: 1, inscription: 'Аня' },
+          { productId: 'cake', quantity: 1, inscription: 'Боря' },
+        ],
+      });
+      const data = prisma.order.create.mock.calls[0][0].data;
+      expect(data.items.create).toHaveLength(2);
+    });
+
+    it('rejects an inscription the product does not allow', async () => {
+      await expect(
+        service.create('user-1', {
+          deliveryType: DeliveryType.PICKUP,
+          storeId: 's1',
+          items: [{ productId: 'p1', quantity: 1, inscription: 'Привет' }],
+        }),
+      ).rejects.toThrow('inscription is not available');
+    });
+
+    it("rejects someone else's reference photo", async () => {
+      await expect(
+        service.create('user-1', {
+          deliveryType: DeliveryType.PICKUP,
+          storeId: 's1',
+          deliveryTime: inHours(49),
+          items: [
+            {
+              productId: 'cake',
+              quantity: 1,
+              referencePhotoUrl: 'http://s3/shirin/references/user-2/x.jpg',
+            },
+          ],
+        }),
+      ).rejects.toThrow('Reference photo not found');
+    });
+  });
+
+  describe('prepayment', () => {
+    it('blocks processing until the prepayment is confirmed', async () => {
+      order = makeOrder({
+        status: OrderStatus.PENDING,
+        paymentStatus: 'PENDING',
+      });
+      await expect(
+        service.updateStatus(ADMIN, 'order-1', OrderStatus.CONFIRMED),
+      ).rejects.toThrow('Confirm the prepayment');
+    });
+
+    it('marks money for refund when a paid order is cancelled', async () => {
+      order = makeOrder({
+        status: OrderStatus.CONFIRMED,
+        paymentStatus: 'PAID',
+      });
+      await service.updateStatus(ADMIN, 'order-1', OrderStatus.CANCELLED);
+      expect(order.paymentStatus).toBe('REFUND_PENDING');
     });
   });
 });

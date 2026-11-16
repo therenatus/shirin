@@ -9,7 +9,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { CreateOrderDto, DeliveryType } from './dto/create-order.dto';
 import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
-import { randomUUID } from 'crypto';
 import {
   OrderStatus,
   Prisma,
@@ -17,9 +16,12 @@ import {
   UserRole,
   LoyaltyTxSource,
   LoyaltyTxType,
+  PaymentMethod,
+  PaymentStatus,
 } from '@prisma/client';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { IntegrationEventsService } from '../integration/integration-events.service';
+import { StorageService } from '../storage/storage.service';
 import { AuthUser } from '../auth/types/auth-user';
 
 const PRODUCT_SELECT = {
@@ -86,9 +88,14 @@ export class OrdersService {
     private redis: RedisService,
     private loyaltyService: LoyaltyService,
     private integrationEvents: IntegrationEventsService,
+    private storage: StorageService,
   ) {}
 
-  async create(userId: string, dto: CreateOrderDto) {
+  /**
+   * Prices, delivery, points, cashback and prepayment for an order, without
+   * saving anything. Used by create() and by the checkout preview.
+   */
+  async calculate(userId: string, dto: CreateOrderDto) {
     if (dto.deliveryType === DeliveryType.DELIVERY && !dto.addressId) {
       throw new BadRequestException('Address is required for delivery');
     }
@@ -117,31 +124,116 @@ export class OrdersService {
       }
     }
 
-    // Merge duplicate product lines
-    const quantities = new Map<string, number>();
-    for (const item of dto.items) {
-      quantities.set(
-        item.productId,
-        (quantities.get(item.productId) || 0) + item.quantity,
-      );
-    }
-
-    const productIds = [...quantities.keys()];
+    const productIds = [...new Set(dto.items.map((i) => i.productId))];
     const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds }, isAvailable: true },
+      where: { id: { in: productIds }, isAvailable: true, isArchived: false },
     });
 
     if (products.length !== productIds.length) {
       throw new BadRequestException('Some products are not available');
     }
+    const byId = new Map(products.map((p) => [p.id, p]));
+
+    // Plain lines of the same product are merged; customised ones
+    // (inscription, wishes, photo) stay separate
+    const lines: {
+      productId: string;
+      quantity: number;
+      inscription?: string;
+      wishes?: string;
+      referencePhotoUrl?: string;
+    }[] = [];
+    for (const item of dto.items) {
+      const product = byId.get(item.productId)!;
+      const inscription = item.inscription?.trim() || undefined;
+      const wishes = item.wishes?.trim() || undefined;
+      if (inscription && !product.allowInscription) {
+        throw new BadRequestException(
+          `An inscription is not available for ${product.name}`,
+        );
+      }
+      if (item.referencePhotoUrl) {
+        if (!product.allowReferencePhoto) {
+          throw new BadRequestException(
+            `A reference photo is not available for ${product.name}`,
+          );
+        }
+        if (!this.storage.isReferencePhotoOf(item.referencePhotoUrl, userId)) {
+          throw new BadRequestException('Reference photo not found');
+        }
+      }
+
+      const customised = inscription || wishes || item.referencePhotoUrl;
+      const same = !customised
+        ? lines.find(
+            (l) =>
+              l.productId === item.productId &&
+              !l.inscription &&
+              !l.wishes &&
+              !l.referencePhotoUrl,
+          )
+        : undefined;
+      if (same) {
+        same.quantity += item.quantity;
+      } else {
+        lines.push({
+          productId: item.productId,
+          quantity: item.quantity,
+          inscription,
+          wishes,
+          referencePhotoUrl: item.referencePhotoUrl,
+        });
+      }
+    }
+
+    // Made-to-order items need a time no earlier than their lead time
+    const now = new Date();
+    const leadHours = Math.max(
+      0,
+      ...lines.map((l) => {
+        const p = byId.get(l.productId)!;
+        return p.isPreorder ? p.leadTimeHours : 0;
+      }),
+    );
+    const hasPreorder = lines.some((l) => byId.get(l.productId)!.isPreorder);
+    const earliestTime = new Date(now.getTime() + leadHours * 3600_000);
+    const deliveryTime = dto.deliveryTime ? new Date(dto.deliveryTime) : null;
+
+    if (hasPreorder && !deliveryTime) {
+      throw new BadRequestException(
+        'Choose the date and time for made-to-order items',
+      );
+    }
+    if (deliveryTime) {
+      // A small grace period for clock differences and slow checkout
+      const minAllowed = new Date(earliestTime.getTime() - 5 * 60_000);
+      if (deliveryTime < minAllowed) {
+        throw new BadRequestException(
+          hasPreorder
+            ? `Earliest available time is ${earliestTime.toISOString()}`
+            : 'Time is in the past',
+        );
+      }
+      if (deliveryTime.getTime() > now.getTime() + 60 * 24 * 3600_000) {
+        throw new BadRequestException(
+          'Orders are accepted up to 60 days ahead',
+        );
+      }
+    }
 
     let subtotal = new Prisma.Decimal(0);
-    const orderItems = products.map((product) => {
-      const quantity = quantities.get(product.id)!;
+    let prepayment = new Prisma.Decimal(0);
+    const orderItems = lines.map((line) => {
+      const product = byId.get(line.productId)!;
       const price = product.discountPrice || product.price;
-      const total = price.mul(quantity);
+      const total = price.mul(line.quantity);
       subtotal = subtotal.add(total);
-      return { productId: product.id, quantity, price, total };
+      if (product.isPreorder && product.prepaymentPercent > 0) {
+        prepayment = prepayment.add(
+          total.mul(product.prepaymentPercent).div(100).ceil(),
+        );
+      }
+      return { ...line, price, total };
     });
 
     const settings = await this.loyaltyService.getSettings();
@@ -164,6 +256,9 @@ export class OrdersService {
     const pointsDiscount = new Prisma.Decimal(pointsToUse);
 
     const total = subtotal.add(deliveryFee).sub(pointsDiscount);
+    if (prepayment.gt(total)) {
+      prepayment = total;
+    }
 
     // Cashback only on the part paid with money (not with points);
     // awarded on delivery
@@ -174,44 +269,86 @@ export class OrdersService {
       .floor()
       .toNumber();
 
+    return {
+      orderItems,
+      subtotal,
+      deliveryFee,
+      pointsToUse,
+      pointsDiscount,
+      maxPoints,
+      total,
+      pointsEarned,
+      prepayment,
+      deliveryTime,
+      earliestTime: hasPreorder ? earliestTime : null,
+      paymentTimeoutMinutes: settings.prepaymentTimeoutMinutes,
+    };
+  }
+
+  /** Checkout preview: what the order would cost, nothing is saved. */
+  async preview(userId: string, dto: CreateOrderDto) {
+    const calc = await this.calculate(userId, dto);
+    return {
+      subtotal: Number(calc.subtotal),
+      deliveryFee: Number(calc.deliveryFee),
+      pointsUsed: calc.pointsToUse,
+      maxPoints: calc.maxPoints,
+      pointsDiscount: Number(calc.pointsDiscount),
+      total: Number(calc.total),
+      pointsEarned: calc.pointsEarned,
+      prepaymentAmount: Number(calc.prepayment),
+      earliestTime: calc.earliestTime,
+      paymentTimeoutMinutes: calc.paymentTimeoutMinutes,
+    };
+  }
+
+  async create(userId: string, dto: CreateOrderDto) {
+    const calc = await this.calculate(userId, dto);
+    const needsPrepayment = calc.prepayment.gt(0);
+
     const orderNumber = await this.generateOrderNumber();
 
-    const orderId = randomUUID();
-
     const order = await this.prisma.$transaction(async (tx) => {
-      if (pointsToUse > 0) {
-        // Debit first: fails without creating the order if points are short
-        await this.loyaltyService.applyPoints(tx, {
-          userId,
-          type: LoyaltyTxType.REDEEM,
-          source: LoyaltyTxSource.APP_ORDER,
-          points: -pointsToUse,
-          description: `Списание за заказ ${orderNumber}`,
-          storeId: dto.storeId,
-        });
-      }
-
       const created = await tx.order.create({
         data: {
-          id: orderId,
           orderNumber,
           userId,
           addressId: dto.addressId,
           storeId: dto.storeId,
           deliveryType: dto.deliveryType,
-          deliveryTime: dto.deliveryTime ? new Date(dto.deliveryTime) : null,
-          comment: dto.comment,
-          subtotal,
-          deliveryFee,
+          deliveryTime: calc.deliveryTime,
+          comment: dto.comment?.trim() || null,
+          subtotal: calc.subtotal,
+          deliveryFee: calc.deliveryFee,
           discount: new Prisma.Decimal(0),
-          pointsUsed: pointsToUse,
-          pointsDiscount,
-          total,
-          pointsEarned,
-          items: { create: orderItems },
+          pointsUsed: calc.pointsToUse,
+          pointsDiscount: calc.pointsDiscount,
+          total: calc.total,
+          pointsEarned: calc.pointsEarned,
+          paymentStatus: needsPrepayment
+            ? PaymentStatus.PENDING
+            : PaymentStatus.NOT_REQUIRED,
+          prepaymentAmount: calc.prepayment,
+          paymentDueAt: needsPrepayment
+            ? new Date(Date.now() + calc.paymentTimeoutMinutes * 60_000)
+            : null,
+          items: { create: calc.orderItems },
         },
         include: ORDER_INCLUDE,
       });
+
+      if (calc.pointsToUse > 0) {
+        // Fails the whole transaction (no order) if points are short
+        await this.loyaltyService.applyPoints(tx, {
+          userId,
+          type: LoyaltyTxType.REDEEM,
+          source: LoyaltyTxSource.APP_ORDER,
+          points: -calc.pointsToUse,
+          description: `Списание за заказ ${orderNumber}`,
+          orderId: created.id,
+          storeId: dto.storeId,
+        });
+      }
 
       await this.integrationEvents.record(tx, 'order.created', created.id, {
         orderNumber: created.orderNumber,
@@ -219,6 +356,7 @@ export class OrdersService {
         storeId: created.storeId,
         deliveryType: created.deliveryType,
         total: created.total.toString(),
+        prepaymentAmount: created.prepaymentAmount.toString(),
       });
 
       return created;
@@ -326,7 +464,10 @@ export class OrdersService {
           userId,
           status: { in: [OrderStatus.PENDING, OrderStatus.CONFIRMED] },
         },
-        data: { status: OrderStatus.CANCELLED },
+        data: {
+          status: OrderStatus.CANCELLED,
+          paymentStatus: this.paymentStatusOnCancel(order.paymentStatus),
+        },
       });
 
       if (count === 0) {
@@ -383,6 +524,15 @@ export class OrdersService {
         );
       }
 
+      if (
+        status !== OrderStatus.CANCELLED &&
+        order.paymentStatus === PaymentStatus.PENDING
+      ) {
+        throw new BadRequestException(
+          'Confirm the prepayment before processing the order',
+        );
+      }
+
       if (status !== OrderStatus.CANCELLED && !order.storeId) {
         throw new BadRequestException(
           'Assign a store to the order before processing it',
@@ -397,6 +547,10 @@ export class OrdersService {
           status,
           completedAt:
             status === OrderStatus.DELIVERED ? new Date() : undefined,
+          paymentStatus:
+            status === OrderStatus.CANCELLED
+              ? this.paymentStatusOnCancel(order.paymentStatus)
+              : undefined,
         },
       });
 
@@ -495,6 +649,186 @@ export class OrdersService {
     });
   }
 
+  /** Paid money must be returned; an unpaid prepayment simply lapses. */
+  private paymentStatusOnCancel(current: PaymentStatus): PaymentStatus {
+    if (current === PaymentStatus.PAID) return PaymentStatus.REFUND_PENDING;
+    if (current === PaymentStatus.PENDING) return PaymentStatus.NOT_REQUIRED;
+    return current;
+  }
+
+  // ==================== PAYMENTS ====================
+
+  /** Company payment details shown to the customer for the prepayment. */
+  async getPaymentInfo() {
+    const rows = await this.prisma.settings.findMany({
+      where: { key: { in: ['payment_details', 'payment_qr_url'] } },
+    });
+    const map = new Map(rows.map((r) => [r.key, r.value]));
+    return {
+      details: map.get('payment_details') ?? null,
+      qrUrl: map.get('payment_qr_url') || null,
+    };
+  }
+
+  /**
+   * Staff confirm the prepayment after seeing it arrive on the company's
+   * account. A bank webhook will call the same logic with method BANK.
+   */
+  async confirmPayment(
+    actor: AuthUser,
+    orderId: string,
+    dto: { method: PaymentMethod; note?: string; externalId?: string },
+  ) {
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({ where: { id: orderId } });
+      if (!order) throw new NotFoundException('Order not found');
+      if (
+        !this.canManage(actor, order.storeId) &&
+        actor.role !== UserRole.ADMIN
+      ) {
+        throw new ForbiddenException('Order belongs to another store');
+      }
+
+      const { count } = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          paymentStatus: PaymentStatus.PENDING,
+          status: { notIn: FINAL_STATUSES },
+        },
+        data: { paymentStatus: PaymentStatus.PAID, paymentDueAt: null },
+      });
+      if (count === 0) {
+        throw new BadRequestException('The order is not waiting for payment');
+      }
+
+      await tx.payment.create({
+        data: {
+          orderId,
+          amount: order.prepaymentAmount,
+          method: dto.method,
+          note: dto.note?.trim() || null,
+          externalId: dto.externalId,
+          confirmedById: actor.id,
+        },
+      });
+
+      await this.integrationEvents.record(
+        tx,
+        'order.payment_confirmed',
+        orderId,
+        {
+          orderNumber: order.orderNumber,
+          amount: order.prepaymentAmount.toString(),
+          method: dto.method,
+          actorId: actor.id,
+        },
+      );
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: ORDER_INCLUDE_WITH_USER,
+      });
+    });
+
+    return this.formatOrder(updated);
+  }
+
+  /** Admin: the prepayment of a cancelled order has been returned. */
+  async markRefunded(actor: AuthUser, orderId: string, note?: string) {
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({ where: { id: orderId } });
+      if (!order) throw new NotFoundException('Order not found');
+
+      const { count } = await tx.order.updateMany({
+        where: { id: orderId, paymentStatus: PaymentStatus.REFUND_PENDING },
+        data: { paymentStatus: PaymentStatus.REFUNDED },
+      });
+      if (count === 0) {
+        throw new BadRequestException('The order has no refund pending');
+      }
+
+      const paid = await tx.payment.aggregate({
+        where: { orderId },
+        _sum: { amount: true },
+      });
+      await tx.payment.create({
+        data: {
+          orderId,
+          amount: (paid._sum.amount ?? new Prisma.Decimal(0)).neg(),
+          method: PaymentMethod.MANUAL_QR,
+          note: note?.trim() || 'Возврат предоплаты',
+          confirmedById: actor.id,
+        },
+      });
+
+      await this.integrationEvents.record(
+        tx,
+        'order.payment_refunded',
+        orderId,
+        {
+          orderNumber: order.orderNumber,
+          actorId: actor.id,
+        },
+      );
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: ORDER_INCLUDE_WITH_USER,
+      });
+    });
+
+    return this.formatOrder(updated);
+  }
+
+  /**
+   * Cancels orders whose prepayment did not arrive in time and returns the
+   * points they used. Called by the scheduler; returns how many were cancelled.
+   */
+  async cancelExpiredUnpaid(now = new Date()): Promise<number> {
+    const expired = await this.prisma.order.findMany({
+      where: {
+        paymentStatus: PaymentStatus.PENDING,
+        paymentDueAt: { lt: now },
+        status: OrderStatus.PENDING,
+      },
+      select: { id: true },
+      take: 100,
+    });
+
+    let cancelled = 0;
+    for (const { id } of expired) {
+      const done = await this.prisma.$transaction(async (tx) => {
+        // Re-checked in the update: payment may have been confirmed meanwhile
+        const { count } = await tx.order.updateMany({
+          where: {
+            id,
+            status: OrderStatus.PENDING,
+            paymentStatus: PaymentStatus.PENDING,
+          },
+          data: {
+            status: OrderStatus.CANCELLED,
+            paymentStatus: PaymentStatus.NOT_REQUIRED,
+          },
+        });
+        if (count === 0) return false;
+
+        const order = await tx.order.findUniqueOrThrow({ where: { id } });
+        await this.recordStatusChange(
+          tx,
+          order,
+          OrderStatus.CANCELLED,
+          'system',
+        );
+        if (order.pointsUsed > 0) {
+          await this.refundPoints(tx, order);
+        }
+        return true;
+      });
+      if (done) cancelled++;
+    }
+    return cancelled;
+  }
+
   /** Admins manage every order; store staff only orders of their store. */
   private canManage(actor: AuthUser, orderStoreId: string | null) {
     if (actor.role === UserRole.ADMIN) return true;
@@ -584,11 +918,17 @@ export class OrdersService {
       completedAt: order.completedAt,
       storeId: order.storeId ?? null,
       nextStatuses: nextStatuses(order),
+      paymentStatus: order.paymentStatus,
+      prepaymentAmount: Number(order.prepaymentAmount ?? 0),
+      paymentDueAt: order.paymentDueAt ?? null,
       items: order.items.map((item: any) => ({
         id: item.id,
         quantity: item.quantity,
         price: Number(item.price),
         total: Number(item.total),
+        inscription: item.inscription ?? null,
+        wishes: item.wishes ?? null,
+        referencePhotoUrl: item.referencePhotoUrl ?? null,
         product: item.product,
       })),
       address: order.address

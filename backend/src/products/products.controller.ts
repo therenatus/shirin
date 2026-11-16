@@ -34,6 +34,15 @@ export class ProductsController {
     return this.productsService.findAll(query);
   }
 
+  @Get('admin/all')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'All products incl. unavailable (Admin)' })
+  findAllAdmin(@Query() query: QueryProductsDto) {
+    return this.productsService.findAll(query, { admin: true });
+  }
+
   @Get('categories')
   @ApiOperation({ summary: 'Get all categories with product counts' })
   getCategories() {

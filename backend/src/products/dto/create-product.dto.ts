@@ -6,7 +6,9 @@ import {
   IsBoolean,
   IsArray,
   IsUUID,
+  IsInt,
   Min,
+  Max,
 } from 'class-validator';
 
 export class CreateProductDto {
@@ -90,6 +92,35 @@ export class CreateProductDto {
   @IsNumber()
   @IsOptional()
   sortOrder?: number;
+
+  @ApiPropertyOptional({ description: 'Made to order (custom cake)' })
+  @IsBoolean()
+  @IsOptional()
+  isPreorder?: boolean;
+
+  @ApiPropertyOptional({ description: 'Hours needed to make it (0-720)' })
+  @IsInt()
+  @Min(0)
+  @Max(720)
+  @IsOptional()
+  leadTimeHours?: number;
+
+  @ApiPropertyOptional({ description: 'Prepayment, % of the item total' })
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  prepaymentPercent?: number;
+
+  @ApiPropertyOptional()
+  @IsBoolean()
+  @IsOptional()
+  allowInscription?: boolean;
+
+  @ApiPropertyOptional()
+  @IsBoolean()
+  @IsOptional()
+  allowReferencePhoto?: boolean;
 
   @ApiProperty()
   @IsUUID()
@@ -179,6 +210,35 @@ export class UpdateProductDto {
   @IsNumber()
   @IsOptional()
   sortOrder?: number;
+
+  @ApiPropertyOptional({ description: 'Made to order (custom cake)' })
+  @IsBoolean()
+  @IsOptional()
+  isPreorder?: boolean;
+
+  @ApiPropertyOptional({ description: 'Hours needed to make it (0-720)' })
+  @IsInt()
+  @Min(0)
+  @Max(720)
+  @IsOptional()
+  leadTimeHours?: number;
+
+  @ApiPropertyOptional({ description: 'Prepayment, % of the item total' })
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  prepaymentPercent?: number;
+
+  @ApiPropertyOptional()
+  @IsBoolean()
+  @IsOptional()
+  allowInscription?: boolean;
+
+  @ApiPropertyOptional()
+  @IsBoolean()
+  @IsOptional()
+  allowReferencePhoto?: boolean;
 
   @ApiPropertyOptional()
   @IsUUID()

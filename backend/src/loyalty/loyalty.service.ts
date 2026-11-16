@@ -546,6 +546,7 @@ export class LoyaltyService {
             'free_delivery_min_amount',
             'loyalty_max_receipt_amount',
             'loyalty_daily_earn_limit',
+            'prepayment_timeout_minutes',
           ],
         },
       },
@@ -575,6 +576,11 @@ export class LoyaltyService {
       ),
       dailyEarnLimit: parseInt(
         settingsMap.get('loyalty_daily_earn_limit') || '2000',
+        10,
+      ),
+      // Unpaid made-to-order orders are cancelled after this
+      prepaymentTimeoutMinutes: parseInt(
+        settingsMap.get('prepayment_timeout_minutes') || '60',
         10,
       ),
       rules: [

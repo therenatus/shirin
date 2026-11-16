@@ -18,6 +18,7 @@ const IDS = {
   PROD_RED_VELVET: '20000000-0000-4000-a000-000000000004',
   PROD_SMETANNIK: '20000000-0000-4000-a000-000000000005',
   PROD_BIRD_MILK: '20000000-0000-4000-a000-000000000006',
+  PROD_CUSTOM_CAKE: '20000000-0000-4000-a000-000000000007',
   // Products - Pastries
   PROD_TIRAMISU: '20000000-0000-4000-a000-000000000010',
   PROD_CHEESECAKE: '20000000-0000-4000-a000-000000000011',
@@ -81,6 +82,21 @@ async function main() {
         key: 'loyalty_daily_earn_limit',
         value: '2000',
         description: 'Макс. баллов, начисляемых клиенту на кассе за сутки',
+      },
+      {
+        key: 'prepayment_timeout_minutes',
+        value: '60',
+        description: 'Через сколько минут отменять заказ без предоплаты',
+      },
+      {
+        key: 'payment_details',
+        value: 'Оплатите предоплату по QR-коду. В назначении платежа укажите номер заказа.',
+        description: 'Текст с реквизитами для предоплаты (видит клиент)',
+      },
+      {
+        key: 'payment_qr_url',
+        value: '',
+        description: 'Ссылка на картинку QR-кода компании для оплаты',
       },
       {
         key: 'catalog_master',
@@ -981,13 +997,38 @@ async function main() {
   });
   console.log('Store staff created:', staff.phone);
 
+  // Made-to-order cake: lead time, prepayment, inscription and photo
+  await prisma.product.upsert({
+    where: { id: IDS.PROD_CUSTOM_CAKE },
+    update: {},
+    create: {
+      id: IDS.PROD_CUSTOM_CAKE,
+      name: 'Торт на заказ',
+      nameRu: 'Торт на заказ',
+      nameKy: 'Буйрутма торт',
+      description: 'Торт по вашему эскизу: надпись, оформление, начинка. Готовим за 2 дня.',
+      descriptionRu: 'Торт по вашему эскизу: надпись, оформление, начинка. Готовим за 2 дня.',
+      descriptionKy: 'Сиздин эскиз боюнча торт: жазуу, жасалгалоо, начинка. 2 күндө даярдайбыз.',
+      price: 2500,
+      images: ['https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400'],
+      weight: 2000,
+      categoryId: IDS.CAT_CAKES,
+      sortOrder: 0,
+      isPreorder: true,
+      leadTimeHours: 48,
+      prepaymentPercent: 50,
+      allowInscription: true,
+      allowReferencePhoto: true,
+    },
+  });
+
   console.log('\n✅ Database seeded successfully!');
   console.log('   - 6 categories');
-  console.log('   - 28 products');
+  console.log('   - 29 products (incl. a made-to-order cake)');
   console.log('   - 3 stores');
   console.log('   - 3 promotions');
   console.log('   - 1 raffle');
-  console.log('   - 12 settings');
+  console.log('   - 15 settings');
   console.log('   - 3 users (admin, test client, store staff)');
 }
 
