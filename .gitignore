@@ -45,4 +45,3 @@ mobile/.fvm/
 *.sqlite
 
 # Prisma
-backend/prisma/migrations/
