@@ -6,6 +6,7 @@ import { z } from 'zod';
 import Header from '../../components/layout/Header';
 import { Category } from '../../types';
 import api from '../../services/api';
+import { apiErrorMessage } from '../../utils/errors';
 
 const productSchema = z.object({
   nameRu: z.string().min(1, 'Обязательное поле'),
@@ -15,6 +16,19 @@ const productSchema = z.object({
   price: z.number({ error: 'Введите число' }).min(1, 'Минимум 1 сом'),
   categoryId: z.string().min(1, 'Выберите категорию'),
   isAvailable: z.boolean(),
+  isPreorder: z.boolean(),
+  leadTimeHours: z
+    .number({ error: 'Введите число' })
+    .int('Целое число')
+    .min(0, 'Не меньше 0')
+    .max(720, 'Не больше 720 часов'),
+  prepaymentPercent: z
+    .number({ error: 'Введите число' })
+    .int('Целое число')
+    .min(0, 'Не меньше 0')
+    .max(100, 'Не больше 100'),
+  allowInscription: z.boolean(),
+  allowReferencePhoto: z.boolean(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -26,7 +40,7 @@ const ProductForm: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<ProductFormData>({
+  const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<ProductFormData>({
     resolver: zodResolver(productSchema),
     defaultValues: {
       nameRu: '',
@@ -36,8 +50,14 @@ const ProductForm: React.FC = () => {
       price: 0,
       categoryId: '',
       isAvailable: true,
+      isPreorder: false,
+      leadTimeHours: 0,
+      prepaymentPercent: 0,
+      allowInscription: false,
+      allowReferencePhoto: false,
     },
   });
+  const isPreorder = watch('isPreorder');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -57,6 +77,11 @@ const ProductForm: React.FC = () => {
             price: Number(product.price),
             categoryId: product.categoryId,
             isAvailable: product.isAvailable,
+            isPreorder: !!product.isPreorder,
+            leadTimeHours: product.leadTimeHours ?? 0,
+            prepaymentPercent: product.prepaymentPercent ?? 0,
+            allowInscription: !!product.allowInscription,
+            allowReferencePhoto: !!product.allowReferencePhoto,
           });
         }
       } catch {
@@ -70,15 +95,22 @@ const ProductForm: React.FC = () => {
     setLoading(true);
     try {
       // Backend requires the base `name`; Russian is the primary language
-      const payload = { ...data, name: data.nameRu };
+      const payload = {
+        ...data,
+        name: data.nameRu,
+        // Made-to-order settings only apply when the product is made to order
+        ...(data.isPreorder
+          ? {}
+          : { leadTimeHours: 0, prepaymentPercent: 0, allowInscription: false, allowReferencePhoto: false }),
+      };
       if (isEdit) {
         await api.patch(`/products/${id}`, payload);
       } else {
         await api.post('/products', payload);
       }
       navigate('/products');
-    } catch {
-      alert('Ошибка при сохранении');
+    } catch (err: any) {
+      alert(apiErrorMessage(err, 'Ошибка при сохранении'));
     } finally {
       setLoading(false);
     }
@@ -177,6 +209,73 @@ const ProductForm: React.FC = () => {
                 В наличии
               </label>
             </div>
+          </div>
+
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 space-y-4">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="isPreorder"
+                {...register('isPreorder')}
+                className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+              />
+              <label htmlFor="isPreorder" className="text-sm font-medium text-gray-700">
+                Только под заказ (торт на заказ)
+              </label>
+            </div>
+
+            {isPreorder && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Срок изготовления, часов
+                    </label>
+                    <input
+                      type="number"
+                      {...register('leadTimeHours', { valueAsNumber: true })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Клиент не сможет выбрать время раньше</p>
+                    {errors.leadTimeHours && <p className="text-red-500 text-xs mt-1">{errors.leadTimeHours.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Предоплата, %
+                    </label>
+                    <input
+                      type="number"
+                      {...register('prepaymentPercent', { valueAsNumber: true })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">0 — без предоплаты</p>
+                    {errors.prepaymentPercent && <p className="text-red-500 text-xs mt-1">{errors.prepaymentPercent.message}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="allowInscription"
+                    {...register('allowInscription')}
+                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                  />
+                  <label htmlFor="allowInscription" className="text-sm text-gray-700">
+                    Можно заказать надпись
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="allowReferencePhoto"
+                    {...register('allowReferencePhoto')}
+                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                  />
+                  <label htmlFor="allowReferencePhoto" className="text-sm text-gray-700">
+                    Можно приложить фото-образец
+                  </label>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-3">

@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import Header from '../../components/layout/Header';
 import { Order, OrderStatus, Store } from '../../types';
 import { ApiOrder, mapOrder, toApiStatus } from '../../services/mappers';
-import { statusAction, statusFlow, statusLabels } from '../../constants/orders';
+import { paymentLabels, paymentStyles, statusAction, statusFlow, statusLabels } from '../../constants/orders';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
 import { apiErrorMessage } from '../../utils/errors';
@@ -61,7 +61,12 @@ const OrderDetails: React.FC = () => {
     if (!order) return;
     if (
       newStatus === 'cancelled' &&
-      !window.confirm(`Отменить заказ ${order.orderNumber ?? ''}? Баллы вернутся клиенту.`)
+      !window.confirm(
+        `Отменить заказ ${order.orderNumber ?? ''}? Баллы вернутся клиенту.` +
+          (order.paymentStatus === 'PAID'
+            ? ` Предоплату ${order.prepaymentAmount.toLocaleString()} сом нужно будет вернуть.`
+            : ''),
+      )
     ) {
       return;
     }
@@ -74,6 +79,40 @@ const OrderDetails: React.FC = () => {
       applyUpdate(response.data);
     } catch (err: any) {
       setActionError(apiErrorMessage(err, 'Не удалось изменить статус'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConfirmPayment = async (method: 'MANUAL_QR' | 'CASH') => {
+    if (!order) return;
+    const how = method === 'CASH' ? 'наличными в точке' : 'по QR / переводом';
+    if (!window.confirm(`Подтвердить, что предоплата ${order.prepaymentAmount.toLocaleString()} сом получена ${how}?`)) {
+      return;
+    }
+    setSaving(true);
+    setActionError('');
+    try {
+      const response = await api.post<ApiOrder>(`/orders/${id}/payments/confirm`, { method });
+      applyUpdate(response.data);
+    } catch (err: any) {
+      setActionError(apiErrorMessage(err, 'Не удалось подтвердить оплату'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRefunded = async () => {
+    if (!order) return;
+    const note = window.prompt('Предоплата возвращена клиенту? Комментарий (как вернули):', '');
+    if (note === null) return;
+    setSaving(true);
+    setActionError('');
+    try {
+      const response = await api.post<ApiOrder>(`/orders/${id}/payments/refund`, { note: note || undefined });
+      applyUpdate(response.data);
+    } catch (err: any) {
+      setActionError(apiErrorMessage(err, 'Не удалось отметить возврат'));
     } finally {
       setSaving(false);
     }
@@ -119,6 +158,7 @@ const OrderDetails: React.FC = () => {
   const canCancel = order.nextStatuses.includes('cancelled');
   const isFinal = order.status === 'delivered' || order.status === 'cancelled';
   const needsStore = !order.store && !isFinal;
+  const awaitingPayment = order.paymentStatus === 'PENDING';
 
   return (
     <div>
@@ -159,6 +199,12 @@ const OrderDetails: React.FC = () => {
                 </div>
               )}
 
+              {awaitingPayment && !isFinal && (
+                <p className="mt-4 px-4 py-3 rounded-lg bg-orange-50 text-orange-700 text-sm">
+                  Заказ можно взять в работу после предоплаты. Подтвердите её в блоке «Оплата».
+                </p>
+              )}
+
               {needsStore && (
                 <p className="mt-4 px-4 py-3 rounded-lg bg-orange-50 text-orange-700 text-sm">
                   Чтобы взять заказ в работу, назначьте точку{isAdmin ? ' справа' : ' (это делает администратор)'}.
@@ -173,7 +219,7 @@ const OrderDetails: React.FC = () => {
                     <button
                       key={status}
                       onClick={() => handleStatusChange(status)}
-                      disabled={saving || needsStore}
+                      disabled={saving || needsStore || awaitingPayment}
                       className="px-5 py-3 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50"
                     >
                       {statusAction(status, order.deliveryType)}
@@ -200,6 +246,25 @@ const OrderDetails: React.FC = () => {
                     <div>
                       <p className="text-sm font-medium">{item.name}</p>
                       <p className="text-xs text-gray-500">{item.price} сом × {item.quantity}</p>
+                      {item.inscription && (
+                        <p className="text-sm mt-1">
+                          <span className="text-gray-500">Надпись:</span> «{item.inscription}»
+                        </p>
+                      )}
+                      {item.wishes && (
+                        <p className="text-sm">
+                          <span className="text-gray-500">Пожелания:</span> {item.wishes}
+                        </p>
+                      )}
+                      {item.referencePhotoUrl && (
+                        <a href={item.referencePhotoUrl} target="_blank" rel="noreferrer" className="inline-block mt-2">
+                          <img
+                            src={item.referencePhotoUrl}
+                            alt="Фото-образец"
+                            className="w-28 h-28 object-cover rounded-lg border border-gray-100"
+                          />
+                        </a>
+                      )}
                     </div>
                     <p className="text-sm font-semibold">{(item.price * item.quantity).toLocaleString()} сом</p>
                   </div>
@@ -220,6 +285,51 @@ const OrderDetails: React.FC = () => {
           </div>
 
           <div className="space-y-6">
+            {order.paymentStatus !== 'NOT_REQUIRED' && (
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Оплата</h3>
+                <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${paymentStyles[order.paymentStatus]}`}>
+                  {paymentLabels[order.paymentStatus]}
+                </span>
+                <p className="mt-3 text-sm">
+                  Предоплата: <b>{order.prepaymentAmount.toLocaleString()} сом</b>
+                </p>
+                {awaitingPayment && order.paymentDueAt && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Отменится автоматически, если не оплатить до{' '}
+                    {new Date(order.paymentDueAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+                {awaitingPayment && !isFinal && (
+                  <div className="mt-4 flex flex-col gap-2">
+                    <button
+                      onClick={() => handleConfirmPayment('MANUAL_QR')}
+                      disabled={saving}
+                      className="w-full py-3 bg-primary text-white text-sm font-medium rounded-lg disabled:opacity-50"
+                    >
+                      Оплачено по QR / переводом
+                    </button>
+                    <button
+                      onClick={() => handleConfirmPayment('CASH')}
+                      disabled={saving}
+                      className="w-full py-3 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg disabled:opacity-50"
+                    >
+                      Оплачено наличными в точке
+                    </button>
+                  </div>
+                )}
+                {order.paymentStatus === 'REFUND_PENDING' && isAdmin && (
+                  <button
+                    onClick={handleRefunded}
+                    disabled={saving}
+                    className="mt-4 w-full py-3 bg-red-50 text-red-700 text-sm font-medium rounded-lg disabled:opacity-50"
+                  >
+                    Отметить: предоплата возвращена
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
               <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Информация</h3>
               <div className="space-y-3 text-sm">

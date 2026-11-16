@@ -4,7 +4,7 @@ import { Search, Eye, Volume2, VolumeX, ChevronLeft, ChevronRight } from 'lucide
 import Header from '../../components/layout/Header';
 import { Order, OrderStatus, Store } from '../../types';
 import { ApiOrdersPage, mapOrder, toApiStatus } from '../../services/mappers';
-import { statusLabels, statusStyles } from '../../constants/orders';
+import { paymentLabels, paymentStyles, statusLabels, statusStyles } from '../../constants/orders';
 import { useNewOrderAlert } from '../../hooks/useNewOrderAlert';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
@@ -226,6 +226,11 @@ const OrdersList: React.FC = () => {
                       <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${statusStyles[order.status]}`}>
                         {statusLabels[order.status]}
                       </span>
+                      {(order.paymentStatus === 'PENDING' || order.paymentStatus === 'REFUND_PENDING') && (
+                        <span className={`mt-1 block w-fit px-2 py-0.5 rounded-full text-xs whitespace-nowrap ${paymentStyles[order.paymentStatus]}`}>
+                          {paymentLabels[order.paymentStatus]}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-4 text-xs">
                       {order.store ? (

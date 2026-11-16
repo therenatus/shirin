@@ -33,7 +33,7 @@ export const getMockProducts = (): Product[] => [
   { id: 'p-6', name: 'Латте', nameRu: 'Латте', descriptionRu: 'Кофе латте', price: 200, categoryId: 'cat-4', category: getMockCategories()[3], isAvailable: true, createdAt: '2024-01-20T10:00:00Z' },
 ];
 
-const mockOrders: Omit<Order, 'nextStatuses' | 'store'>[] = [
+const mockOrders: Omit<Order, 'nextStatuses' | 'store' | 'paymentStatus' | 'prepaymentAmount'>[] = [
   { id: 'ord-1', userId: 'u-1', status: 'delivered', items: [{ id: 'oi-1', productId: 'p-1', name: 'Торт Наполеон', price: 850, quantity: 1 }], totalSum: 850, address: 'ул. Киевская, 120', createdAt: new Date(Date.now() - 86400000 * 3).toISOString(), updatedAt: new Date(Date.now() - 86400000 * 2).toISOString() },
   { id: 'ord-2', userId: 'u-2', status: 'preparing', items: [{ id: 'oi-2', productId: 'p-2', name: 'Чизкейк Нью-Йорк', price: 750, quantity: 1 }, { id: 'oi-3', productId: 'p-3', name: 'Эклеры', price: 350, quantity: 2 }], totalSum: 1450, address: 'ул. Московская, 55', createdAt: new Date(Date.now() - 7200000).toISOString(), updatedAt: new Date(Date.now() - 3600000).toISOString() },
   { id: 'ord-3', userId: 'u-3', status: 'pending', items: [{ id: 'oi-4', productId: 'p-4', name: 'Макаруны', price: 420, quantity: 1 }], totalSum: 420, createdAt: new Date(Date.now() - 1800000).toISOString(), updatedAt: new Date(Date.now() - 1800000).toISOString() },
@@ -42,7 +42,13 @@ const mockOrders: Omit<Order, 'nextStatuses' | 'store'>[] = [
 ];
 
 export const getMockOrders = (): Order[] =>
-  mockOrders.map((o) => ({ ...o, nextStatuses: [], store: null }));
+  mockOrders.map((o) => ({
+    ...o,
+    nextStatuses: [],
+    store: null,
+    paymentStatus: 'NOT_REQUIRED',
+    prepaymentAmount: 0,
+  }));
 
 export const getMockUsers = (): User[] => [
   { id: 'u-1', phone: '+996555111222', firstName: 'Алия', lastName: 'Каримова', loyaltyPoints: 320, role: 'CLIENT', createdAt: '2024-01-10T08:00:00Z' },

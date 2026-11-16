@@ -10,6 +10,7 @@ import {
   MapPin,
   Coffee,
   Receipt,
+  Settings,
   LogOut,
   X,
 } from 'lucide-react';
@@ -29,6 +30,7 @@ const navItems = [
   { path: '/staff', icon: UserCog, label: 'Сотрудники', roles: ADMIN_ONLY },
   { path: '/promotions', icon: Tag, label: 'Акции', roles: ADMIN_ONLY },
   { path: '/stores', icon: MapPin, label: 'Магазины', roles: ADMIN_ONLY },
+  { path: '/settings', icon: Settings, label: 'Настройки', roles: ADMIN_ONLY },
 ];
 
 interface SidebarProps {

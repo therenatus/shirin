@@ -13,7 +13,8 @@ const ProductsList: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await api.get<{ data: Product[] }>('/products', {
+        // Admin list includes products taken off sale
+        const response = await api.get<{ data: Product[] }>('/products/admin/all', {
           params: { limit: 100 },
         });
         // Prisma Decimal fields arrive as strings
@@ -32,7 +33,7 @@ const ProductsList: React.FC = () => {
   );
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Удалить товар?')) return;
+    if (!window.confirm('Убрать товар в архив? Он исчезнет из каталога и этого списка, но сохранится в истории заказов.')) return;
     try {
       await api.delete(`/products/${id}`);
       setProducts((prev) => prev.filter((p) => p.id !== id));

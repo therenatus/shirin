@@ -20,6 +20,12 @@ const TRANSLATIONS: [RegExp, string][] = [
   [/^Cannot change status/, 'Такой переход статуса недоступен'],
   [/^Order status was changed concurrently/, 'Статус уже изменил кто-то другой — обновите страницу'],
   [/^You cannot remove your own admin role/, 'Нельзя снять с себя роль администратора'],
+  [/^Confirm the prepayment/, 'Сначала подтвердите предоплату'],
+  [/^The order is not waiting for payment/, 'Заказ не ожидает оплаты — обновите страницу'],
+  [/^The order has no refund pending/, 'По заказу нет возврата'],
+  [/^Enter a whole number/, 'Введите целое число'],
+  [/^Value must be between (\d+)/, 'Значение вне допустимого диапазона'],
+  [/^Enter a link/, 'Ссылка должна начинаться с http:// или https://'],
 ];
 
 const translate = (message: string) => {

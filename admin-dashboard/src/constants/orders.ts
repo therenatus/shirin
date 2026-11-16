@@ -1,4 +1,4 @@
-import { OrderStatus, StaffRole } from '../types';
+import { OrderStatus, PaymentStatus, StaffRole } from '../types';
 
 export const statusLabels: Record<OrderStatus, string> = {
   pending: 'Ожидает',
@@ -43,6 +43,22 @@ export const statusFlow = (deliveryType?: 'delivery' | 'pickup'): OrderStatus[] 
   deliveryType === 'delivery'
     ? ['pending', 'confirmed', 'preparing', 'ready', 'delivering', 'delivered']
     : ['pending', 'confirmed', 'preparing', 'ready', 'delivered'];
+
+export const paymentLabels: Record<PaymentStatus, string> = {
+  NOT_REQUIRED: 'Без предоплаты',
+  PENDING: 'Ждёт предоплату',
+  PAID: 'Предоплата получена',
+  REFUND_PENDING: 'Нужно вернуть предоплату',
+  REFUNDED: 'Предоплата возвращена',
+};
+
+export const paymentStyles: Record<PaymentStatus, string> = {
+  NOT_REQUIRED: 'bg-gray-100 text-gray-600',
+  PENDING: 'bg-orange-100 text-orange-700',
+  PAID: 'bg-green-100 text-green-700',
+  REFUND_PENDING: 'bg-red-100 text-red-700',
+  REFUNDED: 'bg-gray-100 text-gray-600',
+};
 
 export const roleLabels: Record<StaffRole | 'CLIENT', string> = {
   ADMIN: 'Администратор',

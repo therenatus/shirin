@@ -11,6 +11,7 @@ import UsersList from './pages/Users/UsersList';
 import PromotionsList from './pages/Promotions/PromotionsList';
 import StoresList from './pages/Stores/StoresList';
 import StaffList from './pages/Staff/StaffList';
+import SettingsPage from './pages/Settings/SettingsPage';
 import Login from './pages/Login/Login';
 import CashDesk from './pages/Loyalty/CashDesk';
 import LoyaltyReport from './pages/Loyalty/LoyaltyReport';
@@ -75,6 +76,7 @@ function App() {
           <Route path="staff" element={<RequireRole roles={ADMIN}><StaffList /></RequireRole>} />
           <Route path="promotions" element={<RequireRole roles={ADMIN}><PromotionsList /></RequireRole>} />
           <Route path="stores" element={<RequireRole roles={ADMIN}><StoresList /></RequireRole>} />
+          <Route path="settings" element={<RequireRole roles={ADMIN}><SettingsPage /></RequireRole>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

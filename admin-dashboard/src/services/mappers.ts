@@ -1,4 +1,4 @@
-import { Order, OrderStatus, Store } from '../types';
+import { Order, OrderStatus, PaymentStatus, Store } from '../types';
 
 /** Order shape returned by the backend (`formatOrder` in orders.service.ts). */
 export interface ApiOrder {
@@ -10,6 +10,9 @@ export interface ApiOrder {
   comment?: string | null;
   deliveryTime?: string | null;
   nextStatuses?: string[];
+  paymentStatus?: PaymentStatus;
+  prepaymentAmount?: number;
+  paymentDueAt?: string | null;
   createdAt: string;
   updatedAt?: string;
   completedAt?: string | null;
@@ -17,6 +20,9 @@ export interface ApiOrder {
     id: string;
     quantity: number;
     price: number;
+    inscription?: string | null;
+    wishes?: string | null;
+    referencePhotoUrl?: string | null;
     product: { id: string; name: string; nameRu?: string | null; images?: string[] };
   }[];
   address: { street: string; apartment?: string | null } | null;
@@ -44,7 +50,13 @@ export const mapOrder = (o: ApiOrder): Order => ({
     price: i.price,
     quantity: i.quantity,
     imageUrl: i.product.images?.[0],
+    inscription: i.inscription,
+    wishes: i.wishes,
+    referencePhotoUrl: i.referencePhotoUrl,
   })),
+  paymentStatus: o.paymentStatus ?? 'NOT_REQUIRED',
+  prepaymentAmount: o.prepaymentAmount ?? 0,
+  paymentDueAt: o.paymentDueAt,
   totalSum: o.total,
   address: o.address
     ? [o.address.street, o.address.apartment && `кв. ${o.address.apartment}`]

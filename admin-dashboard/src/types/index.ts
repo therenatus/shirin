@@ -45,6 +45,7 @@ export interface Product {
   categoryId: string;
   category?: Category;
   isAvailable: boolean;
+  isPreorder?: boolean;
   createdAt: string;
 }
 
@@ -55,7 +56,12 @@ export interface OrderItem {
   price: number;
   quantity: number;
   imageUrl?: string;
+  inscription?: string | null;
+  wishes?: string | null;
+  referencePhotoUrl?: string | null;
 }
+
+export type PaymentStatus = 'NOT_REQUIRED' | 'PENDING' | 'PAID' | 'REFUND_PENDING' | 'REFUNDED';
 
 export type OrderStatus =
   | 'pending'
@@ -84,6 +90,9 @@ export interface Order {
   store: { id: string; name: string; address: string } | null;
   comment?: string | null;
   deliveryTime?: string | null;
+  paymentStatus: PaymentStatus;
+  prepaymentAmount: number;
+  paymentDueAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
