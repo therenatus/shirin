@@ -2,30 +2,26 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import Header from '../../components/layout/Header';
-import { Order, OrderStatus } from '../../types';
+import { Order, OrderStatus, Store } from '../../types';
 import { ApiOrder, mapOrder, toApiStatus } from '../../services/mappers';
+import { statusAction, statusFlow, statusLabels } from '../../constants/orders';
+import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
 
-const statusLabels: Record<OrderStatus, string> = {
-  pending: 'Ожидает',
-  confirmed: 'Подтверждён',
-  preparing: 'Готовится',
-  ready: 'Готов',
-  delivering: 'В пути',
-  delivered: 'Доставлен',
-  cancelled: 'Отменён',
+const errorMessage = (err: any, fallback: string) => {
+  const message = err?.response?.data?.message;
+  return Array.isArray(message) ? message.join(', ') : message || fallback;
 };
-
-const getStatusFlow = (order: Order): OrderStatus[] =>
-  order.deliveryType === 'delivery'
-    ? ['pending', 'confirmed', 'preparing', 'ready', 'delivering', 'delivered']
-    : ['pending', 'confirmed', 'preparing', 'ready', 'delivered'];
 
 const OrderDetails: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const isAdmin = useAuthStore((s) => s.role === 'ADMIN');
   const [order, setOrder] = useState<Order | null>(null);
+  const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -41,15 +37,62 @@ const OrderDetails: React.FC = () => {
     fetchOrder();
   }, [id]);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+    api
+      .get<Store[]>('/stores')
+      .then((res) => setStores(res.data))
+      .catch(() => setStores([]));
+  }, [isAdmin]);
+
+  const applyUpdate = (data: ApiOrder) => {
+    // Status endpoints don't return the customer; keep what we already have
+    setOrder((prev) => {
+      const next = mapOrder(data);
+      return prev
+        ? {
+            ...next,
+            userId: prev.userId,
+            userPhone: next.userPhone ?? prev.userPhone,
+            customerName: next.customerName ?? prev.customerName,
+          }
+        : next;
+    });
+  };
+
   const handleStatusChange = async (newStatus: OrderStatus) => {
     if (!order) return;
+    if (
+      newStatus === 'cancelled' &&
+      !window.confirm(`Отменить заказ ${order.orderNumber ?? ''}? Баллы вернутся клиенту.`)
+    ) {
+      return;
+    }
+    setSaving(true);
+    setActionError('');
     try {
       const response = await api.patch<ApiOrder>(`/orders/${id}/status`, {
         status: toApiStatus(newStatus),
       });
-      setOrder({ ...mapOrder(response.data), userId: order.userId, userPhone: order.userPhone });
+      applyUpdate(response.data);
     } catch (err: any) {
-      alert(err?.response?.data?.message || 'Ошибка при обновлении статуса');
+      setActionError(errorMessage(err, 'Не удалось изменить статус'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAssignStore = async (storeId: string) => {
+    if (!storeId) return;
+    setSaving(true);
+    setActionError('');
+    try {
+      const response = await api.patch<ApiOrder>(`/orders/${id}/store`, { storeId });
+      applyUpdate(response.data);
+    } catch (err: any) {
+      setActionError(errorMessage(err, 'Не удалось назначить точку'));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -73,13 +116,17 @@ const OrderDetails: React.FC = () => {
     );
   }
 
-  const statusFlow = getStatusFlow(order);
-  const currentIdx = statusFlow.indexOf(order.status);
+  const flow = statusFlow(order.deliveryType);
+  const currentIdx = flow.indexOf(order.status);
+  const forward = order.nextStatuses.filter((s) => s !== 'cancelled');
+  const canCancel = order.nextStatuses.includes('cancelled');
+  const isFinal = order.status === 'delivered' || order.status === 'cancelled';
+  const needsStore = !order.store && !isFinal;
 
   return (
     <div>
       <Header title={`Заказ ${order.orderNumber ?? `#${order.id.slice(-4)}`}`} />
-      <div className="p-8">
+      <div className="p-4 lg:p-8">
         <button
           onClick={() => navigate('/orders')}
           className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6 text-sm"
@@ -89,9 +136,7 @@ const OrderDetails: React.FC = () => {
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Order info */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Status timeline */}
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold mb-4">Статус заказа</h3>
               {order.status === 'cancelled' ? (
@@ -99,45 +144,57 @@ const OrderDetails: React.FC = () => {
                   Заказ отменён
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  {statusFlow.map((status, idx) => (
+                <div className="flex flex-wrap items-center gap-2">
+                  {flow.map((status, idx) => (
                     <React.Fragment key={status}>
-                      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${
-                        idx <= currentIdx
-                          ? 'bg-primary/10 text-primary'
-                          : 'bg-gray-100 text-gray-400'
-                      }`}>
+                      <div
+                        className={`px-3 py-2 rounded-lg text-xs font-medium ${
+                          idx <= currentIdx ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-400'
+                        }`}
+                      >
                         {statusLabels[status]}
                       </div>
-                      {idx < statusFlow.length - 1 && (
-                        <div className={`w-6 h-0.5 ${idx < currentIdx ? 'bg-primary' : 'bg-gray-200'}`} />
+                      {idx < flow.length - 1 && (
+                        <div className={`w-4 h-0.5 ${idx < currentIdx ? 'bg-primary' : 'bg-gray-200'}`} />
                       )}
                     </React.Fragment>
                   ))}
                 </div>
               )}
 
-              {order.status !== 'delivered' && order.status !== 'cancelled' && (
-                <div className="mt-4 flex gap-2">
-                  {currentIdx < statusFlow.length - 1 && (
+              {needsStore && (
+                <p className="mt-4 px-4 py-3 rounded-lg bg-orange-50 text-orange-700 text-sm">
+                  Чтобы взять заказ в работу, назначьте точку{isAdmin ? ' справа' : ' (это делает администратор)'}.
+                </p>
+              )}
+
+              {actionError && <p className="mt-4 text-sm text-red-600">{actionError}</p>}
+
+              {(forward.length > 0 || canCancel) && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {forward.map((status) => (
                     <button
-                      onClick={() => handleStatusChange(statusFlow[currentIdx + 1])}
-                      className="px-4 py-2 bg-primary text-white text-sm rounded-lg hover:bg-primary-dark transition-colors"
+                      key={status}
+                      onClick={() => handleStatusChange(status)}
+                      disabled={saving || needsStore}
+                      className="px-5 py-3 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50"
                     >
-                      {statusLabels[statusFlow[currentIdx + 1]]}
+                      {statusAction(status, order.deliveryType)}
+                    </button>
+                  ))}
+                  {canCancel && (
+                    <button
+                      onClick={() => handleStatusChange('cancelled')}
+                      disabled={saving}
+                      className="px-5 py-3 bg-red-50 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                    >
+                      Отменить
                     </button>
                   )}
-                  <button
-                    onClick={() => handleStatusChange('cancelled')}
-                    className="px-4 py-2 bg-red-50 text-red-600 text-sm rounded-lg hover:bg-red-100 transition-colors"
-                  >
-                    Отменить
-                  </button>
                 </div>
               )}
             </div>
 
-            {/* Items */}
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold mb-4">Товары</h3>
               <div className="space-y-3">
@@ -156,21 +213,40 @@ const OrderDetails: React.FC = () => {
                 <span className="font-bold text-primary">{order.totalSum.toLocaleString()} сом</span>
               </div>
             </div>
+
+            {order.comment && (
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold mb-2">Комментарий клиента</h3>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{order.comment}</p>
+              </div>
+            )}
           </div>
 
-          {/* Sidebar info */}
           <div className="space-y-6">
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
               <h3 className="text-sm font-semibold text-gray-500 uppercase mb-3">Информация</h3>
               <div className="space-y-3 text-sm">
                 <div>
-                  <p className="text-gray-500">ID заказа</p>
-                  <p className="font-medium">{order.id}</p>
+                  <p className="text-gray-500">Клиент</p>
+                  <p className="font-medium">{order.customerName ?? '—'}</p>
+                  {order.userPhone && (
+                    <a href={`tel:${order.userPhone}`} className="text-primary">
+                      {order.userPhone}
+                    </a>
+                  )}
                 </div>
                 <div>
-                  <p className="text-gray-500">Дата создания</p>
-                  <p className="font-medium">{new Date(order.createdAt).toLocaleString('ru-RU')}</p>
+                  <p className="text-gray-500">Способ получения</p>
+                  <p className="font-medium">
+                    {order.deliveryType === 'delivery' ? 'Доставка' : 'Самовывоз'}
+                  </p>
                 </div>
+                {order.deliveryTime && (
+                  <div>
+                    <p className="text-gray-500">Желаемое время</p>
+                    <p className="font-medium">{new Date(order.deliveryTime).toLocaleString('ru-RU')}</p>
+                  </div>
+                )}
                 {order.address && (
                   <div>
                     <p className="text-gray-500">Адрес доставки</p>
@@ -178,8 +254,26 @@ const OrderDetails: React.FC = () => {
                   </div>
                 )}
                 <div>
-                  <p className="text-gray-500">Клиент</p>
-                  <p className="font-medium">{order.userPhone ?? order.userId}</p>
+                  <p className="text-gray-500">Точка</p>
+                  {isAdmin && !isFinal ? (
+                    <select
+                      value={order.store?.id ?? ''}
+                      onChange={(e) => handleAssignStore(e.target.value)}
+                      disabled={saving}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    >
+                      <option value="" disabled>Выберите точку</option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="font-medium">{order.store?.name ?? 'Не назначена'}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-gray-500">Создан</p>
+                  <p className="font-medium">{new Date(order.createdAt).toLocaleString('ru-RU')}</p>
                 </div>
               </div>
             </div>

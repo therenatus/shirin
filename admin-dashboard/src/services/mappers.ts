@@ -7,7 +7,11 @@ export interface ApiOrder {
   status: string;
   deliveryType: 'delivery' | 'pickup';
   total: number;
+  comment?: string | null;
+  deliveryTime?: string | null;
+  nextStatuses?: string[];
   createdAt: string;
+  updatedAt?: string;
   completedAt?: string | null;
   items: {
     id: string;
@@ -16,7 +20,7 @@ export interface ApiOrder {
     product: { id: string; name: string; nameRu?: string | null; images?: string[] };
   }[];
   address: { street: string; apartment?: string | null } | null;
-  store: { name: string; address: string } | null;
+  store: { id: string; name: string; address: string } | null;
   user?: { id: string; phone: string; firstName?: string | null; lastName?: string | null };
 }
 
@@ -25,8 +29,14 @@ export const mapOrder = (o: ApiOrder): Order => ({
   orderNumber: o.orderNumber,
   userId: o.user?.id ?? '',
   userPhone: o.user?.phone,
+  customerName:
+    [o.user?.firstName, o.user?.lastName].filter(Boolean).join(' ') || undefined,
   status: o.status.toLowerCase() as OrderStatus,
+  nextStatuses: (o.nextStatuses ?? []).map((s) => s.toLowerCase() as OrderStatus),
   deliveryType: o.deliveryType,
+  store: o.store,
+  comment: o.comment,
+  deliveryTime: o.deliveryTime,
   items: o.items.map((i) => ({
     id: i.id,
     productId: i.product.id,
@@ -40,12 +50,23 @@ export const mapOrder = (o: ApiOrder): Order => ({
     ? [o.address.street, o.address.apartment && `кв. ${o.address.apartment}`]
         .filter(Boolean)
         .join(', ')
-    : o.store
-      ? `Самовывоз: ${o.store.name}`
-      : undefined,
+    : undefined,
   createdAt: o.createdAt,
-  updatedAt: o.completedAt ?? o.createdAt,
+  updatedAt: o.updatedAt ?? o.completedAt ?? o.createdAt,
 });
+
+/** Paginated list returned by `GET /orders/admin/all`. */
+export interface ApiOrdersPage {
+  data: ApiOrder[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    /** PENDING orders in the caller's scope, ignoring the status filter. */
+    pendingCount: number;
+  };
+}
 
 export const toApiStatus = (status: OrderStatus) => status.toUpperCase();
 

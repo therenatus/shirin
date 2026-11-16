@@ -1,11 +1,27 @@
+export type UserRole = 'CLIENT' | 'ADMIN' | 'SUPPORT' | 'STORE_STAFF';
+
+/** Roles allowed into the dashboard. */
+export type StaffRole = Exclude<UserRole, 'CLIENT'>;
+
 export interface User {
   id: string;
   phone: string;
   firstName?: string;
   lastName?: string;
   loyaltyPoints: number;
-  role: 'CLIENT' | 'ADMIN' | 'SUPPORT';
+  role: UserRole;
   createdAt: string;
+}
+
+/** User row on the staff page (`GET /users/admin/staff`). */
+export interface StaffMember {
+  id: string;
+  phone: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  role: UserRole;
+  isActive: boolean;
+  store: { id: string; name: string } | null;
 }
 
 export interface Category {
@@ -56,11 +72,18 @@ export interface Order {
   userId: string;
   userPhone?: string;
   user?: User;
+  customerName?: string;
   deliveryType?: 'delivery' | 'pickup';
   status: OrderStatus;
+  /** Statuses the server allows next (cancel included). */
+  nextStatuses: OrderStatus[];
   items: OrderItem[];
   totalSum: number;
   address?: string;
+  /** Store that fulfils the order; null for an unassigned delivery order. */
+  store: { id: string; name: string; address: string } | null;
+  comment?: string | null;
+  deliveryTime?: string | null;
   createdAt: string;
   updatedAt: string;
 }
