@@ -19,6 +19,7 @@ import { LoyaltyModule } from './loyalty/loyalty.module';
 import { IntegrationModule } from './integration/integration.module';
 import { SettingsModule } from './settings/settings.module';
 import { LegalModule } from './legal/legal.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import databaseConfig from './config/database.config';
 import jwtConfig from './config/jwt.config';
 import storageConfig from './config/storage.config';
@@ -53,6 +54,7 @@ import redisConfig from './config/redis.config';
     LoyaltyModule,
     SettingsModule,
     LegalModule,
+    NotificationsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })

@@ -22,6 +22,13 @@ import {
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { IntegrationEventsService } from '../integration/integration-events.service';
 import { StorageService } from '../storage/storage.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import {
+  orderStatusMessage,
+  paymentConfirmedMessage,
+  paymentExpiredMessage,
+  paymentRefundedMessage,
+} from '../notifications/messages';
 import { AuthUser } from '../auth/types/auth-user';
 
 const PRODUCT_SELECT = {
@@ -90,6 +97,7 @@ export class OrdersService {
     private loyaltyService: LoyaltyService,
     private integrationEvents: IntegrationEventsService,
     private storage: StorageService,
+    private notifications: NotificationsService,
   ) {}
 
   /**
@@ -587,6 +595,9 @@ export class OrdersService {
       });
     });
 
+    const message = orderStatusMessage(updated, status);
+    if (message) await this.notifications.notify(updated.userId, message);
+
     return this.formatOrder(updated);
   }
 
@@ -731,6 +742,11 @@ export class OrdersService {
       });
     });
 
+    await this.notifications.notify(
+      updated.userId,
+      paymentConfirmedMessage(updated),
+    );
+
     return this.formatOrder(updated);
   }
 
@@ -778,6 +794,11 @@ export class OrdersService {
       });
     });
 
+    await this.notifications.notify(
+      updated.userId,
+      paymentRefundedMessage(updated),
+    );
+
     return this.formatOrder(updated);
   }
 
@@ -811,7 +832,7 @@ export class OrdersService {
             paymentStatus: PaymentStatus.NOT_REQUIRED,
           },
         });
-        if (count === 0) return false;
+        if (count === 0) return null;
 
         const order = await tx.order.findUniqueOrThrow({ where: { id } });
         await this.recordStatusChange(
@@ -823,9 +844,15 @@ export class OrdersService {
         if (order.pointsUsed > 0) {
           await this.refundPoints(tx, order);
         }
-        return true;
+        return order;
       });
-      if (done) cancelled++;
+      if (done) {
+        cancelled++;
+        await this.notifications.notify(
+          done.userId,
+          paymentExpiredMessage(done),
+        );
+      }
     }
     return cancelled;
   }

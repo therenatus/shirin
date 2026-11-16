@@ -9,6 +9,12 @@ import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { IntegrationEventsService } from '../integration/integration-events.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import {
+  pointsEarnedMessage,
+  pointsReversedMessage,
+  pointsSpentMessage,
+} from '../notifications/messages';
 import {
   CoffeeSize,
   CoffeePunchCard,
@@ -92,6 +98,7 @@ export class LoyaltyService {
     private prisma: PrismaService,
     private redis: RedisService,
     private integrationEvents: IntegrationEventsService,
+    private notifications: NotificationsService,
   ) {}
 
   // ==================== LEDGER ====================
@@ -308,6 +315,10 @@ export class LoyaltyService {
       });
     });
 
+    await this.notifications.notify(
+      customer.id,
+      pointsEarnedMessage(points, result.balanceAfter),
+    );
     return { transactionId: result.id, points, balance: result.balanceAfter };
   }
 
@@ -366,6 +377,10 @@ export class LoyaltyService {
       throw e;
     }
 
+    await this.notifications.notify(
+      customer.id,
+      pointsSpentMessage(dto.points, result.balanceAfter),
+    );
     return {
       transactionId: result.id,
       points: dto.points,
@@ -410,6 +425,10 @@ export class LoyaltyService {
       }),
     );
 
+    await this.notifications.notify(
+      original.userId,
+      pointsReversedMessage(-original.points, result.balanceAfter),
+    );
     return { transactionId: result.id, balance: result.balanceAfter };
   }
 

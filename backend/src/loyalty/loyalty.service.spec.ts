@@ -169,7 +169,9 @@ describe('LoyaltyService', () => {
 
   beforeEach(() => {
     db = makeDb();
-    service = new LoyaltyService(db.prisma, db.redis, db.events);
+    service = new LoyaltyService(db.prisma, db.redis, db.events, {
+      notify: jest.fn(),
+    } as any);
   });
 
   const balance = () => db.users.get('user-1').loyaltyPoints;

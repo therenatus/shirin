@@ -58,6 +58,7 @@ describe('OrdersService', () => {
   let order: any;
   let events: any;
   let storage: any;
+  let notifications: any;
 
   beforeEach(() => {
     order = makeOrder();
@@ -116,7 +117,15 @@ describe('OrdersService', () => {
         url.includes(`/references/${userId}/`),
       ),
     };
-    service = new OrdersService(prisma, redis, loyalty, events, storage);
+    notifications = { notify: jest.fn() };
+    service = new OrdersService(
+      prisma,
+      redis,
+      loyalty,
+      events,
+      storage,
+      notifications,
+    );
   });
 
   describe('updateStatus', () => {
@@ -156,6 +165,30 @@ describe('OrdersService', () => {
         prisma,
         expect.objectContaining({ type: 'REFUND', points: 120 }),
       );
+    });
+
+    it('tells the customer when a pickup order is ready', async () => {
+      order = makeOrder({
+        status: OrderStatus.PREPARING,
+        store: { name: 'Ширин - Центр' },
+      });
+      await service.updateStatus(ADMIN, 'order-1', OrderStatus.READY);
+      expect(notifications.notify).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          title: expect.stringContaining('готов'),
+          body: expect.stringContaining('Ширин - Центр'),
+          data: expect.objectContaining({ orderId: 'order-1' }),
+        }),
+      );
+    });
+
+    it('does not notify when the status change fails', async () => {
+      prisma.order.updateMany.mockResolvedValueOnce({ count: 0 });
+      await expect(
+        service.updateStatus(ADMIN, 'order-1', OrderStatus.DELIVERED),
+      ).rejects.toBeDefined();
+      expect(notifications.notify).not.toHaveBeenCalled();
     });
 
     it('records a status change event in the same transaction', async () => {

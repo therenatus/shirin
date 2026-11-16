@@ -407,6 +407,8 @@ model Notification {
 
   createdAt DateTime @default(now())
 
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
   @@map("notifications")
 }
 
