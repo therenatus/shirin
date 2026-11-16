@@ -296,6 +296,33 @@ describe('LoyaltyService', () => {
       ).rejects.toThrow('expired');
     });
 
+    it('keeps the QR usable after a rejected attempt', async () => {
+      const { code } = await service.issueQrToken('user-1');
+      await expect(
+        service.redeemInStore(STAFF, {
+          code,
+          receiptNumber: 'B-1',
+          receiptAmount: 100,
+          points: 51,
+        }),
+      ).rejects.toThrow('At most 50 points');
+      await expect(
+        service.redeemInStore(STAFF, {
+          code,
+          receiptNumber: 'B-1',
+          receiptAmount: 1000,
+          points: 101,
+        }),
+      ).rejects.toThrow('Not enough loyalty points');
+      const ok = await service.redeemInStore(STAFF, {
+        code,
+        receiptNumber: 'B-1',
+        receiptAmount: 100,
+        points: 50,
+      });
+      expect(ok.balance).toBe(50);
+    });
+
     it('limits points to the share of the receipt', async () => {
       const { code } = await service.issueQrToken('user-1');
       await expect(

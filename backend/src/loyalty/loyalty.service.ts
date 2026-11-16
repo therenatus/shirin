@@ -27,6 +27,8 @@ import {
 /** Prefix of the one-time QR token shown in the app (vs. the permanent qrCode). */
 export const QR_TOKEN_PREFIX = 'T:';
 export const QR_TOKEN_TTL_SECONDS = 60;
+/** Lifetime of a token given back after a failed debit. */
+const QR_TOKEN_RESTORE_SECONDS = 30;
 const qrTokenKey = (token: string) => `loyalty:qr:${token}`;
 
 export interface ApplyPointsInput {
@@ -198,16 +200,14 @@ export class LoyaltyService {
   /** Finds the customer by a one-time token or the permanent QR code. */
   private async resolveCustomer(
     code: string,
-    opts: { requireToken?: boolean; consumeToken?: boolean } = {},
+    opts: { requireToken?: boolean } = {},
   ) {
     const trimmed = code.trim();
     let userId: string | null = null;
 
     if (trimmed.startsWith(QR_TOKEN_PREFIX)) {
       const key = qrTokenKey(trimmed.slice(QR_TOKEN_PREFIX.length));
-      userId = opts.consumeToken
-        ? await this.redis.getDel(key)
-        : await this.redis.get(key);
+      userId = await this.redis.get(key);
       if (!userId) {
         throw new BadRequestException(
           'QR code has expired, ask the customer to refresh it',
@@ -314,10 +314,9 @@ export class LoyaltyService {
   async redeemInStore(actor: AuthUser, dto: RedeemPointsDto) {
     const storeId = this.cashDeskStore(actor, dto.storeId);
     const settings = await this.getSettings();
-    // Token is consumed: one scan of the live QR allows one debit
+    // Validate everything first so a typo does not burn the customer's QR
     const customer = await this.resolveCustomer(dto.code, {
       requireToken: true,
-      consumeToken: true,
     });
 
     if (customer.id === actor.id) {
@@ -336,19 +335,36 @@ export class LoyaltyService {
       );
     }
 
-    const result = await this.prisma.$transaction((tx) =>
-      this.applyPoints(tx, {
-        userId: customer.id,
-        type: LoyaltyTxType.REDEEM,
-        source: LoyaltyTxSource.IN_STORE,
-        points: -dto.points,
-        description: `Оплата баллами, чек ${dto.receiptNumber}`,
-        storeId,
-        staffId: actor.id,
-        receiptNumber: dto.receiptNumber,
-        receiptAmount: amount,
-      }),
-    );
+    // One scan of the live QR allows one debit: claim the token atomically
+    // (two concurrent requests cannot both get it) and give it back if the
+    // debit itself fails, e.g. not enough points
+    const tokenKey = qrTokenKey(dto.code.trim().slice(QR_TOKEN_PREFIX.length));
+    const claimedBy = await this.redis.getDel(tokenKey);
+    if (claimedBy !== customer.id) {
+      throw new BadRequestException(
+        'QR code has expired, ask the customer to refresh it',
+      );
+    }
+
+    let result: { id: string; balanceAfter: number };
+    try {
+      result = await this.prisma.$transaction((tx) =>
+        this.applyPoints(tx, {
+          userId: customer.id,
+          type: LoyaltyTxType.REDEEM,
+          source: LoyaltyTxSource.IN_STORE,
+          points: -dto.points,
+          description: `Оплата баллами, чек ${dto.receiptNumber}`,
+          storeId,
+          staffId: actor.id,
+          receiptNumber: dto.receiptNumber,
+          receiptAmount: amount,
+        }),
+      );
+    } catch (e) {
+      await this.redis.set(tokenKey, customer.id, QR_TOKEN_RESTORE_SECONDS);
+      throw e;
+    }
 
     return {
       transactionId: result.id,
