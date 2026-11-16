@@ -68,6 +68,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client.del(keys);
   }
 
+  async decr(key: string): Promise<number> {
+    return this.client.decr(key);
+  }
+
   /** Increments the counter and sets TTL when the key is created. */
   async incr(key: string, ttlSeconds?: number): Promise<number> {
     const value = await this.client.incr(key);

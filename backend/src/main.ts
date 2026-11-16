@@ -8,6 +8,13 @@ async function bootstrap() {
     cors: true,
   });
 
+  // Behind a reverse proxy (nginx, load balancer) the client IP comes from
+  // X-Forwarded-For; without this all clients share one rate limit
+  const trustProxy = Number(process.env.TRUST_PROXY ?? 0);
+  if (trustProxy > 0) {
+    app.getHttpAdapter().getInstance().set('trust proxy', trustProxy);
+  }
+
   // Global prefix
   app.setGlobalPrefix('api/v1');
 

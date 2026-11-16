@@ -26,6 +26,11 @@ class FakeRedis {
     this.store.set(key, String(v));
     return v;
   }
+  async decr(key: string) {
+    const v = Number(this.store.get(key) ?? 0) - 1;
+    this.store.set(key, String(v));
+    return v;
+  }
 }
 
 const PHONE = '+996700123456';
@@ -98,7 +103,52 @@ describe('AuthService', () => {
     await expect(service.sendCode({ phone: PHONE })).rejects.toMatchObject({
       status: 503,
     });
-    expect(redis.store.size).toBe(0);
+    expect(redis.store.has(`sms:code:${PHONE}`)).toBe(false);
+    expect(redis.store.has(`sms:cooldown:${PHONE}`)).toBe(false);
+    expect(redis.store.get(`sms:sent:${PHONE}`)).toBe('0');
+  });
+
+  it('limits SMS per phone per day', async () => {
+    for (let i = 0; i < 5; i++) {
+      await service.sendCode({ phone: PHONE });
+      redis.store.delete(`sms:cooldown:${PHONE}`);
+    }
+    await expect(service.sendCode({ phone: PHONE })).rejects.toMatchObject({
+      status: 429,
+    });
+  });
+
+  it('resending does not reset the wrong-code counter', async () => {
+    // 10 wrong codes across two resends lock the phone for an hour
+    for (let round = 0; round < 2; round++) {
+      redis.store.delete(`sms:cooldown:${PHONE}`);
+      const code = await sendAndGetCode();
+      const wrong = code === '1111' ? '2222' : '1111';
+      for (let i = 0; i < 5; i++) {
+        await service
+          .verifyCode({ phone: PHONE, code: wrong })
+          .catch(() => undefined);
+      }
+    }
+    redis.store.delete(`sms:cooldown:${PHONE}`);
+    await expect(service.sendCode({ phone: PHONE })).rejects.toMatchObject({
+      status: 429,
+    });
+  });
+
+  it('counts concurrent guesses against the per-code limit', async () => {
+    const code = await sendAndGetCode();
+    const wrong = code === '1111' ? '2222' : '1111';
+    const results = await Promise.allSettled(
+      Array.from({ length: 20 }, () =>
+        service.verifyCode({ phone: PHONE, code: wrong }),
+      ),
+    );
+    expect(results.every((r) => r.status === 'rejected')).toBe(true);
+    // The code is gone: even the right one no longer works
+    await expect(
+      service.verifyCode({ phone: PHONE, code }),
+    ).rejects.toBeDefined();
   });
 
   it('rejects an invalid code', async () => {
