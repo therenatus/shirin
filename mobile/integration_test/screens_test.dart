@@ -196,5 +196,6 @@ void main() {
     await open('/loyalty', '10-loyalty');
     await open('/loyalty/history', '10b-points-history');
     await open('/promotions', '11-promotions');
+    await open('/notifications', '12-notifications');
   });
 }

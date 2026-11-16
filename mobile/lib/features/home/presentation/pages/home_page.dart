@@ -1,3 +1,4 @@
+import '../../../notifications/presentation/widgets/notifications_bell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -382,6 +383,12 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
           ),
+        ),
+        // Notifications bell, above the frosted bar so it stays tappable
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 6,
+          right: 16,
+          child: const NotificationsBell(),
         ),
       ],
     );

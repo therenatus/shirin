@@ -1,3 +1,6 @@
+import '../push/push_service.dart';
+import '../../features/notifications/data/notifications_repository.dart';
+import '../../features/notifications/presentation/bloc/notifications_cubit.dart';
 import 'package:get_it/get_it.dart';
 import '../network/api_client.dart';
 import '../network/api_interceptors.dart';
@@ -70,15 +73,9 @@ final sl = GetIt.instance;
 
 Future<void> init() async {
   // Core
-  sl.registerLazySingleton<SecureStorageService>(
-    () => SecureStorageService(),
-  );
-  sl.registerLazySingleton<AuthInterceptor>(
-    () => AuthInterceptor(sl()),
-  );
-  sl.registerLazySingleton<ApiClient>(
-    () => ApiClient(authInterceptor: sl()),
-  );
+  sl.registerLazySingleton<SecureStorageService>(() => SecureStorageService());
+  sl.registerLazySingleton<AuthInterceptor>(() => AuthInterceptor(sl()));
+  sl.registerLazySingleton<ApiClient>(() => ApiClient(authInterceptor: sl()));
 
   // Auth - Data Sources
   sl.registerLazySingleton<AuthRemoteDatasource>(
@@ -140,12 +137,7 @@ Future<void> init() async {
   sl.registerFactory(() => CartBloc(sl()));
 
   // Home - BLoC
-  sl.registerFactory(
-    () => HomeBloc(
-      getCategories: sl(),
-      getProducts: sl(),
-    ),
-  );
+  sl.registerFactory(() => HomeBloc(getCategories: sl(), getProducts: sl()));
 
   // Orders - Data Sources
   sl.registerLazySingleton<OrdersRemoteDatasource>(
@@ -182,9 +174,7 @@ Future<void> init() async {
   );
 
   // Orders - BLoC
-  sl.registerFactory(
-    () => OrdersBloc(getOrders: sl(), getOrderById: sl()),
-  );
+  sl.registerFactory(() => OrdersBloc(getOrders: sl(), getOrderById: sl()));
 
   // Loyalty - Data Sources
   sl.registerLazySingleton<LoyaltyRemoteDatasource>(
@@ -210,13 +200,18 @@ Future<void> init() async {
     () => LoyaltyBloc(getLoyaltyInfo: sl(), getLoyaltyHistory: sl()),
   );
 
+  // Notifications: one cubit for the whole app (bell badge + screen)
+  sl.registerLazySingleton(
+    () => NotificationsRepository(sl(), sl<AuthLocalDatasource>()),
+  );
+  sl.registerLazySingleton(() => NotificationsCubit(sl()));
+  sl.registerLazySingleton(() => PushService(sl()));
+
   // Live QR for the cash desk
   sl.registerFactory(() => QrTokenCubit(getQrToken: sl()));
 
   // Punch Cards - BLoC
-  sl.registerFactory(
-    () => PunchCardsBloc(getPunchCards: sl()),
-  );
+  sl.registerFactory(() => PunchCardsBloc(getPunchCards: sl()));
 
   // Promotions - Data Sources
   sl.registerLazySingleton<PromotionsRemoteDatasource>(
@@ -235,9 +230,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => GetPromotions(sl()));
 
   // Promotions - BLoC
-  sl.registerFactory(
-    () => PromotionsBloc(getPromotions: sl()),
-  );
+  sl.registerFactory(() => PromotionsBloc(getPromotions: sl()));
 
   // Stores - Data Sources
   sl.registerLazySingleton<StoresRemoteDatasource>(
@@ -256,9 +249,7 @@ Future<void> init() async {
   sl.registerLazySingleton(() => GetStores(sl()));
 
   // Stores - BLoC
-  sl.registerFactory(
-    () => StoresBloc(getStores: sl()),
-  );
+  sl.registerFactory(() => StoresBloc(getStores: sl()));
 
   // Addresses - Data Sources
   sl.registerLazySingleton<AddressesRemoteDatasource>(

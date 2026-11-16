@@ -8,28 +8,29 @@ import 'api_interceptors.dart';
 class ApiClient {
   final Dio _dio;
 
-  ApiClient({
-    required AuthInterceptor authInterceptor,
-  }) : _dio = Dio(
-          BaseOptions(
-            baseUrl: ApiEndpoints.baseUrl,
-            connectTimeout: const Duration(seconds: 15),
-            receiveTimeout: const Duration(seconds: 15),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-          ),
-        ) {
+  ApiClient({required AuthInterceptor authInterceptor})
+    : _dio = Dio(
+        BaseOptions(
+          baseUrl: ApiEndpoints.baseUrl,
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 15),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+        ),
+      ) {
     authInterceptor.setDio(_dio);
     _dio.interceptors.add(authInterceptor);
     // Logs headers (tokens) and bodies: never in release builds
     if (kDebugMode) {
-      _dio.interceptors.add(PrettyDioLogger(
-        requestHeader: true,
-        requestBody: true,
-        responseBody: true,
-      ));
+      _dio.interceptors.add(
+        PrettyDioLogger(
+          requestHeader: true,
+          requestBody: true,
+          responseBody: true,
+        ),
+      );
     }
   }
 
@@ -50,7 +51,11 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     try {
-      return await _dio.post(path, data: data, queryParameters: queryParameters);
+      return await _dio.post(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+      );
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -85,7 +90,11 @@ class ApiClient {
     Map<String, dynamic>? queryParameters,
   }) async {
     try {
-      return await _dio.patch(path, data: data, queryParameters: queryParameters);
+      return await _dio.patch(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+      );
     } on DioException catch (e) {
       throw _handleError(e);
     }

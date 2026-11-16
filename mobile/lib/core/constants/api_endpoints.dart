@@ -55,6 +55,10 @@ class ApiEndpoints {
   static const String orderPreview = '/orders/preview';
   static const String orderPaymentInfo = '/orders/payment-info';
   static const String referencePhoto = '/storage/reference-photo';
+  static const String notifications = '/notifications';
+  static const String notificationsUnread = '/notifications/unread-count';
+  static const String notificationsReadAll = '/notifications/read-all';
+  static const String fcmToken = '/users/me/fcm-token';
 
   // Promotions
   static const String promotions = '/promotions';

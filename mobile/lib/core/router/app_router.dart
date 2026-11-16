@@ -1,3 +1,4 @@
+import '../../features/notifications/presentation/pages/notifications_page.dart';
 import '../../features/cart/domain/entities/cart_item.dart';
 import '../../features/cart/presentation/bloc/cart_bloc.dart';
 import '../../features/cart/presentation/bloc/cart_state.dart';
@@ -41,10 +42,7 @@ class AppRouter {
     initialLocation: '/',
     routes: [
       // Auth routes (outside shell)
-      GoRoute(
-        path: '/',
-        builder: (context, state) => const SplashPage(),
-      ),
+      GoRoute(path: '/', builder: (context, state) => const SplashPage()),
       GoRoute(
         path: '/login',
         builder: (context, state) => const PhoneInputPage(),
@@ -67,9 +65,8 @@ class AppRouter {
           // Home tab
           GoRoute(
             path: '/home',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: HomePage(),
-            ),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: HomePage()),
           ),
           // Catalog tab
           GoRoute(
@@ -89,8 +86,9 @@ class AppRouter {
               final categoryName = state.extra as String?;
               return NoTransitionPage(
                 child: BlocProvider(
-                  create: (_) => di.sl<ProductsBloc>()
-                    ..add(LoadProducts(categoryId: categoryId)),
+                  create: (_) =>
+                      di.sl<ProductsBloc>()
+                        ..add(LoadProducts(categoryId: categoryId)),
                   child: ProductsListPage(
                     categoryId: categoryId,
                     categoryName: categoryName,
@@ -106,8 +104,8 @@ class AppRouter {
               final productId = state.pathParameters['id']!;
               return MaterialPage(
                 child: BlocProvider(
-                  create: (_) => di.sl<ProductsBloc>()
-                    ..add(LoadProductDetails(productId)),
+                  create: (_) =>
+                      di.sl<ProductsBloc>()..add(LoadProductDetails(productId)),
                   child: ProductDetailsPage(productId: productId),
                 ),
               );
@@ -116,9 +114,8 @@ class AppRouter {
           // Cart tab
           GoRoute(
             path: '/cart',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: CartPage(),
-            ),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: CartPage()),
           ),
           // Checkout (from the cart)
           GoRoute(
@@ -134,12 +131,16 @@ class AppRouter {
               );
             },
           ),
+          GoRoute(
+            path: '/notifications',
+            pageBuilder: (context, state) =>
+                const MaterialPage(child: NotificationsPage()),
+          ),
           // Profile tab
           GoRoute(
             path: '/profile',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ProfilePage(),
-            ),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: ProfilePage()),
           ),
           // Orders
           GoRoute(
@@ -157,8 +158,8 @@ class AppRouter {
               final orderId = state.pathParameters['id']!;
               return MaterialPage(
                 child: BlocProvider(
-                  create: (_) => di.sl<OrdersBloc>()
-                    ..add(LoadOrderDetails(orderId)),
+                  create: (_) =>
+                      di.sl<OrdersBloc>()..add(LoadOrderDetails(orderId)),
                   child: OrderDetailsPage(orderId: orderId),
                 ),
               );
@@ -169,7 +170,8 @@ class AppRouter {
             path: '/loyalty',
             pageBuilder: (context, state) => NoTransitionPage(
               child: BlocProvider(
-                create: (_) => di.sl<LoyaltyBloc>()..add(const LoadLoyaltyInfo()),
+                create: (_) =>
+                    di.sl<LoyaltyBloc>()..add(const LoadLoyaltyInfo()),
                 child: const LoyaltyCardPage(),
               ),
             ),
@@ -178,7 +180,8 @@ class AppRouter {
             path: '/loyalty/history',
             pageBuilder: (context, state) => NoTransitionPage(
               child: BlocProvider(
-                create: (_) => di.sl<LoyaltyBloc>()..add(const LoadLoyaltyHistory()),
+                create: (_) =>
+                    di.sl<LoyaltyBloc>()..add(const LoadLoyaltyHistory()),
                 child: const PointsHistoryPage(),
               ),
             ),
@@ -188,7 +191,8 @@ class AppRouter {
             path: '/promotions',
             pageBuilder: (context, state) => NoTransitionPage(
               child: BlocProvider(
-                create: (_) => di.sl<PromotionsBloc>()..add(const LoadPromotions()),
+                create: (_) =>
+                    di.sl<PromotionsBloc>()..add(const LoadPromotions()),
                 child: const PromotionsListPage(),
               ),
             ),
@@ -207,9 +211,7 @@ class AppRouter {
             path: '/stores/:id',
             pageBuilder: (context, state) {
               final store = state.extra as Store;
-              return MaterialPage(
-                child: StoreDetailsPage(store: store),
-              );
+              return MaterialPage(child: StoreDetailsPage(store: store));
             },
           ),
           // Stores map

@@ -33,6 +33,7 @@ class AppColors {
   static const Color background = Color(0xFFFAF6F7);
   static const Color surface = Color(0xFFFFFFFF);
   static const Color surfaceMuted = Color(0xFFF3ECEF);
+
   /// Tile behind product photos (Drinkit-style isolated object on a pastel).
   static const Color productTile = Color(0xFFF6F0F2);
   static const Color secondaryBackground = primarySoft;
