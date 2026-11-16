@@ -130,6 +130,47 @@ export interface StaffCustomer {
   loyaltyPoints: number;
   level: string;
   punchCards: PunchCard[];
+  cashbackPercent: number;
+  maxPointsUsePercent: number;
+  /** True when found by the live QR from the app (required to spend points). */
+  canRedeem: boolean;
+  /** Permanent customer code, used for crediting and coffee after a debit. */
+  customerCode: string;
+}
+
+export type LoyaltyTxType = 'EARN' | 'REDEEM' | 'REFUND' | 'ADJUST' | 'REVERSAL' | 'FREE_COFFEE';
+export type LoyaltyTxSource = 'APP_ORDER' | 'IN_STORE' | 'ONE_C' | 'MANUAL';
+
+interface PersonRef {
+  id: string;
+  phone: string;
+  firstName?: string | null;
+  lastName?: string | null;
+}
+
+/** Row of `GET /loyalty/staff/transactions`. */
+export interface LoyaltyTransaction {
+  id: string;
+  type: LoyaltyTxType;
+  source: LoyaltyTxSource;
+  points: number;
+  balanceAfter: number | null;
+  description: string | null;
+  receiptNumber: string | null;
+  receiptAmount: number | null;
+  createdAt: string;
+  reversalOfId: string | null;
+  isReversed: boolean;
+  user: PersonRef;
+  staff: PersonRef | null;
+  store: { id: string; name: string } | null;
+  order: { id: string; orderNumber: string } | null;
+}
+
+export interface LoyaltyReport {
+  data: LoyaltyTransaction[];
+  totals: { type: LoyaltyTxType; count: number; points: number; receiptAmount: number }[];
+  meta: { page: number; limit: number; total: number; totalPages: number };
 }
 
 export interface DashboardStats {

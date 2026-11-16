@@ -9,6 +9,7 @@ import {
   Tag,
   MapPin,
   Coffee,
+  Receipt,
   LogOut,
   X,
 } from 'lucide-react';
@@ -21,7 +22,8 @@ const CASH_DESK: StaffRole[] = ['ADMIN', 'STORE_STAFF', 'SUPPORT'];
 const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Дашборд', roles: ADMIN_ONLY },
   { path: '/orders', icon: ShoppingCart, label: 'Заказы', roles: ORDERS },
-  { path: '/loyalty', icon: Coffee, label: 'Выдача кофе', roles: CASH_DESK },
+  { path: '/loyalty', icon: Coffee, label: 'Касса', roles: CASH_DESK },
+  { path: '/loyalty/report', icon: Receipt, label: 'Операции с баллами', roles: ORDERS },
   { path: '/products', icon: Package, label: 'Товары', roles: ADMIN_ONLY },
   { path: '/users', icon: Users, label: 'Клиенты', roles: ADMIN_ONLY },
   { path: '/staff', icon: UserCog, label: 'Сотрудники', roles: ADMIN_ONLY },
@@ -70,7 +72,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               <NavLink
                 key={item.path}
                 to={item.path}
-                end={item.path === '/'}
+                end={item.path === '/' || item.path === '/loyalty'}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-4 py-3 rounded-lg mb-1 text-sm font-medium transition-colors ${
                     isActive

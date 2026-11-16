@@ -228,6 +228,7 @@ export class LoyaltyService {
         lastName: true,
         loyaltyPoints: true,
         isActive: true,
+        qrCode: true,
       },
     });
 
@@ -686,6 +687,11 @@ export class LoyaltyService {
       maxPointsUsePercent: settings.maxPointsUsePercent,
       /** Only a live QR from the app allows spending points. */
       canRedeem: code.trim().startsWith(QR_TOKEN_PREFIX),
+      /**
+       * Permanent code for crediting cashback and giving coffee after the
+       * one-time token has been used up by a debit.
+       */
+      customerCode: user.qrCode,
     };
   }
 

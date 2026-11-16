@@ -7,11 +7,8 @@ import { ApiOrder, mapOrder, toApiStatus } from '../../services/mappers';
 import { statusAction, statusFlow, statusLabels } from '../../constants/orders';
 import { useAuthStore } from '../../store/authStore';
 import api from '../../services/api';
+import { apiErrorMessage } from '../../utils/errors';
 
-const errorMessage = (err: any, fallback: string) => {
-  const message = err?.response?.data?.message;
-  return Array.isArray(message) ? message.join(', ') : message || fallback;
-};
 
 const OrderDetails: React.FC = () => {
   const { id } = useParams();
@@ -76,7 +73,7 @@ const OrderDetails: React.FC = () => {
       });
       applyUpdate(response.data);
     } catch (err: any) {
-      setActionError(errorMessage(err, 'Не удалось изменить статус'));
+      setActionError(apiErrorMessage(err, 'Не удалось изменить статус'));
     } finally {
       setSaving(false);
     }
@@ -90,7 +87,7 @@ const OrderDetails: React.FC = () => {
       const response = await api.patch<ApiOrder>(`/orders/${id}/store`, { storeId });
       applyUpdate(response.data);
     } catch (err: any) {
-      setActionError(errorMessage(err, 'Не удалось назначить точку'));
+      setActionError(apiErrorMessage(err, 'Не удалось назначить точку'));
     } finally {
       setSaving(false);
     }

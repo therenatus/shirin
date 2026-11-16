@@ -4,13 +4,10 @@ import Header from '../../components/layout/Header';
 import { StaffMember, Store, UserRole } from '../../types';
 import { roleLabels } from '../../constants/orders';
 import api from '../../services/api';
+import { apiErrorMessage } from '../../utils/errors';
 
 const ROLES: UserRole[] = ['STORE_STAFF', 'SUPPORT', 'ADMIN', 'CLIENT'];
 
-const errorMessage = (err: any, fallback: string) => {
-  const message = err?.response?.data?.message;
-  return Array.isArray(message) ? message.join(', ') : message || fallback;
-};
 
 interface RowProps {
   member: StaffMember;
@@ -38,7 +35,7 @@ const StaffRow: React.FC<RowProps> = ({ member, stores, onSaved }) => {
       });
       onSaved(data);
     } catch (err: any) {
-      setError(errorMessage(err, 'Не удалось сохранить'));
+      setError(apiErrorMessage(err, 'Не удалось сохранить'));
     } finally {
       setSaving(false);
     }
@@ -122,7 +119,7 @@ const StaffList: React.FC = () => {
       });
       setMembers(data);
     } catch (err: any) {
-      setError(errorMessage(err, 'Не удалось загрузить сотрудников'));
+      setError(apiErrorMessage(err, 'Не удалось загрузить сотрудников'));
     } finally {
       setLoading(false);
     }

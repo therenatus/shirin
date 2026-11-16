@@ -12,7 +12,8 @@ import PromotionsList from './pages/Promotions/PromotionsList';
 import StoresList from './pages/Stores/StoresList';
 import StaffList from './pages/Staff/StaffList';
 import Login from './pages/Login/Login';
-import StaffClaim from './pages/Loyalty/StaffClaim';
+import CashDesk from './pages/Loyalty/CashDesk';
+import LoyaltyReport from './pages/Loyalty/LoyaltyReport';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -68,7 +69,8 @@ function App() {
           <Route path="products/:id/edit" element={<RequireRole roles={ADMIN}><ProductForm /></RequireRole>} />
           <Route path="orders" element={<RequireRole roles={ORDERS}><OrdersList /></RequireRole>} />
           <Route path="orders/:id" element={<RequireRole roles={ORDERS}><OrderDetails /></RequireRole>} />
-          <Route path="loyalty" element={<RequireRole roles={CASH_DESK}><StaffClaim /></RequireRole>} />
+          <Route path="loyalty" element={<RequireRole roles={CASH_DESK}><CashDesk /></RequireRole>} />
+          <Route path="loyalty/report" element={<RequireRole roles={ORDERS}><LoyaltyReport /></RequireRole>} />
           <Route path="users" element={<RequireRole roles={ADMIN}><UsersList /></RequireRole>} />
           <Route path="staff" element={<RequireRole roles={ADMIN}><StaffList /></RequireRole>} />
           <Route path="promotions" element={<RequireRole roles={ADMIN}><PromotionsList /></RequireRole>} />
