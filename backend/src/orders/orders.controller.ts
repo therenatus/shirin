@@ -18,6 +18,8 @@ import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
+import { AssignStoreDto } from './dto/assign-store.dto';
+import type { AuthUser } from '../auth/types/auth-user';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -45,8 +47,8 @@ export class OrdersController {
   @Get(':id')
   @ApiOperation({ summary: 'Get order details' })
   @ApiParam({ name: 'id', description: 'Order ID' })
-  findOne(@CurrentUser() user: any, @Param('id') id: string) {
-    return this.ordersService.findOne(user.id, id, user.role === 'ADMIN');
+  findOne(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.ordersService.findOne(user, id);
   }
 
   @Patch(':id/cancel')
@@ -56,21 +58,41 @@ export class OrdersController {
     return this.ordersService.cancel(user.id, id);
   }
 
-  // Admin endpoints
+  // Staff endpoints: admins see every order, store staff only their store
   @Patch(':id/status')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
-  @ApiOperation({ summary: 'Update order status (Admin)' })
+  @Roles('ADMIN', 'STORE_STAFF')
+  @ApiOperation({ summary: 'Update order status (Admin, store staff)' })
   @ApiParam({ name: 'id', description: 'Order ID' })
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateOrderStatusDto) {
-    return this.ordersService.updateStatus(id, dto.status);
+  updateStatus(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateOrderStatusDto,
+  ) {
+    return this.ordersService.updateStatus(user, id, dto.status);
+  }
+
+  @Patch(':id/store')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Assign the store that fulfils the order (Admin)' })
+  @ApiParam({ name: 'id', description: 'Order ID' })
+  assignStore(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: AssignStoreDto,
+  ) {
+    return this.ordersService.assignStore(user, id, dto.storeId);
   }
 
   @Get('admin/all')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN')
-  @ApiOperation({ summary: 'Get all orders (Admin)' })
-  findAllAdmin(@Query() query: QueryAdminOrdersDto) {
-    return this.ordersService.findAllAdmin(query);
+  @Roles('ADMIN', 'STORE_STAFF')
+  @ApiOperation({ summary: 'List orders (Admin: all, store staff: own store)' })
+  findAllAdmin(
+    @CurrentUser() user: AuthUser,
+    @Query() query: QueryAdminOrdersDto,
+  ) {
+    return this.ordersService.findAllAdmin(user, query);
   }
 }

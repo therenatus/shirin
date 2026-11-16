@@ -9,8 +9,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { CreateOrderDto, DeliveryType } from './dto/create-order.dto';
 import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
-import { OrderStatus, Prisma, CoffeeSize } from '@prisma/client';
+import { OrderStatus, Prisma, CoffeeSize, UserRole } from '@prisma/client';
 import { LoyaltyService } from '../loyalty/loyalty.service';
+import { IntegrationEventsService } from '../integration/integration-events.service';
+import { AuthUser } from '../auth/types/auth-user';
 
 const PRODUCT_SELECT = {
   id: true,
@@ -40,12 +42,42 @@ const FINAL_STATUSES: OrderStatus[] = [
 
 const ORDER_SEQ_TTL_SECONDS = 2 * 24 * 60 * 60;
 
+/** Allowed status changes; delivery/pickup specifics are in nextStatuses(). */
+const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
+  PENDING: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+  CONFIRMED: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
+  PREPARING: [OrderStatus.READY, OrderStatus.CANCELLED],
+  READY: [OrderStatus.DELIVERING, OrderStatus.DELIVERED, OrderStatus.CANCELLED],
+  DELIVERING: [OrderStatus.DELIVERED, OrderStatus.CANCELLED],
+  DELIVERED: [],
+  CANCELLED: [],
+};
+
+/**
+ * Statuses the order can move to next. Pickup orders skip DELIVERING
+ * (READY -> DELIVERED means "handed over"); delivery orders must go
+ * through DELIVERING.
+ */
+export function nextStatuses(order: {
+  status: OrderStatus;
+  deliveryType: string;
+}): OrderStatus[] {
+  const isDelivery = order.deliveryType === (DeliveryType.DELIVERY as string);
+  return TRANSITIONS[order.status].filter((next) => {
+    if (order.status !== OrderStatus.READY) return true;
+    if (next === OrderStatus.DELIVERING) return isDelivery;
+    if (next === OrderStatus.DELIVERED) return !isDelivery;
+    return true;
+  });
+}
+
 @Injectable()
 export class OrdersService {
   constructor(
     private prisma: PrismaService,
     private redis: RedisService,
     private loyaltyService: LoyaltyService,
+    private integrationEvents: IntegrationEventsService,
   ) {}
 
   async create(userId: string, dto: CreateOrderDto) {
@@ -146,7 +178,7 @@ export class OrdersService {
         }
       }
 
-      return tx.order.create({
+      const created = await tx.order.create({
         data: {
           orderNumber,
           userId,
@@ -166,6 +198,16 @@ export class OrdersService {
         },
         include: ORDER_INCLUDE,
       });
+
+      await this.integrationEvents.record(tx, 'order.created', created.id, {
+        orderNumber: created.orderNumber,
+        userId,
+        storeId: created.storeId,
+        deliveryType: created.deliveryType,
+        total: created.total.toString(),
+      });
+
+      return created;
     });
 
     return this.formatOrder(order);
@@ -181,14 +223,31 @@ export class OrdersService {
     return orders.map((order) => this.formatOrder(order));
   }
 
-  async findAllAdmin(query: QueryAdminOrdersDto) {
+  async findAllAdmin(actor: AuthUser, query: QueryAdminOrdersDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const where: Prisma.OrderWhereInput = query.status
-      ? { status: query.status }
-      : {};
 
-    const [orders, total] = await this.prisma.$transaction([
+    // Scope: store staff only ever see their own store
+    const scope: Prisma.OrderWhereInput = {};
+    if (actor.role === UserRole.STORE_STAFF) {
+      scope.storeId = this.requireStaffStore(actor);
+    } else if (query.unassigned) {
+      scope.storeId = null;
+    } else if (query.storeId) {
+      scope.storeId = query.storeId;
+    }
+    if (query.from || query.to) {
+      scope.createdAt = {
+        gte: query.from ? new Date(query.from) : undefined,
+        lt: query.to ? new Date(query.to) : undefined,
+      };
+    }
+
+    const where: Prisma.OrderWhereInput = query.status
+      ? { ...scope, status: query.status }
+      : scope;
+
+    const [orders, total, pendingCount] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -197,15 +256,25 @@ export class OrdersService {
         include: ORDER_INCLUDE_WITH_USER,
       }),
       this.prisma.order.count({ where }),
+      // Lets the dashboard signal new orders regardless of the current filter
+      this.prisma.order.count({
+        where: { ...scope, status: OrderStatus.PENDING },
+      }),
     ]);
 
     return {
       data: orders.map((order) => this.formatOrder(order)),
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        pendingCount,
+      },
     };
   }
 
-  async findOne(userId: string, orderId: string, isAdmin: boolean = false) {
+  async findOne(actor: AuthUser, orderId: string) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: ORDER_INCLUDE_WITH_USER,
@@ -215,7 +284,7 @@ export class OrdersService {
       throw new NotFoundException('Order not found');
     }
 
-    if (!isAdmin && order.userId !== userId) {
+    if (order.userId !== actor.id && !this.canManage(actor, order.storeId)) {
       throw new ForbiddenException('Access denied');
     }
 
@@ -250,6 +319,8 @@ export class OrdersService {
         throw new BadRequestException('Cannot cancel order in current status');
       }
 
+      await this.recordStatusChange(tx, order, OrderStatus.CANCELLED, userId);
+
       if (order.pointsUsed > 0) {
         await tx.user.update({
           where: { id: userId },
@@ -266,7 +337,7 @@ export class OrdersService {
     return this.formatOrder(updated);
   }
 
-  async updateStatus(orderId: string, status: OrderStatus) {
+  async updateStatus(actor: AuthUser, orderId: string, status: OrderStatus) {
     const updated = await this.prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id: orderId },
@@ -287,8 +358,24 @@ export class OrdersService {
         );
       }
 
+      if (!this.canManage(actor, order.storeId)) {
+        throw new ForbiddenException('Order belongs to another store');
+      }
+
       if (order.status === status) {
         throw new BadRequestException('Order already has this status');
+      }
+
+      if (!nextStatuses(order).includes(status)) {
+        throw new BadRequestException(
+          `Cannot change status from ${order.status} to ${status}`,
+        );
+      }
+
+      if (status !== OrderStatus.CANCELLED && !order.storeId) {
+        throw new BadRequestException(
+          'Assign a store to the order before processing it',
+        );
       }
 
       // Optimistic lock: fails if another request changed the status meanwhile,
@@ -305,6 +392,8 @@ export class OrdersService {
       if (count === 0) {
         throw new ConflictException('Order status was changed concurrently');
       }
+
+      await this.recordStatusChange(tx, order, status, actor.id);
 
       if (status === OrderStatus.DELIVERED) {
         if (order.pointsEarned > 0) {
@@ -330,6 +419,80 @@ export class OrdersService {
     });
 
     return this.formatOrder(updated);
+  }
+
+  async assignStore(actor: AuthUser, orderId: string, storeId: string) {
+    const store = await this.prisma.store.findFirst({
+      where: { id: storeId, isActive: true },
+      select: { id: true },
+    });
+    if (!store) {
+      throw new BadRequestException('Store not found');
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.order.updateMany({
+        where: { id: orderId, status: { notIn: FINAL_STATUSES } },
+        data: { storeId },
+      });
+      if (count === 0) {
+        const exists = await tx.order.findUnique({
+          where: { id: orderId },
+          select: { id: true },
+        });
+        if (!exists) throw new NotFoundException('Order not found');
+        throw new BadRequestException('Order is already completed');
+      }
+
+      await this.integrationEvents.record(tx, 'order.store_assigned', orderId, {
+        storeId,
+        actorId: actor.id,
+      });
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: ORDER_INCLUDE_WITH_USER,
+      });
+    });
+
+    return this.formatOrder(updated);
+  }
+
+  /** Admins manage every order; store staff only orders of their store. */
+  private canManage(actor: AuthUser, orderStoreId: string | null) {
+    if (actor.role === UserRole.ADMIN) return true;
+    return (
+      actor.role === UserRole.STORE_STAFF &&
+      !!actor.storeId &&
+      actor.storeId === orderStoreId
+    );
+  }
+
+  private requireStaffStore(actor: AuthUser): string {
+    if (!actor.storeId) {
+      throw new ForbiddenException('Employee is not assigned to a store');
+    }
+    return actor.storeId;
+  }
+
+  private recordStatusChange(
+    tx: Prisma.TransactionClient,
+    order: {
+      id: string;
+      orderNumber: string;
+      status: OrderStatus;
+      storeId: string | null;
+    },
+    status: OrderStatus,
+    actorId: string,
+  ) {
+    return this.integrationEvents.record(tx, 'order.status_changed', order.id, {
+      orderNumber: order.orderNumber,
+      from: order.status,
+      to: status,
+      storeId: order.storeId,
+      actorId,
+    });
   }
 
   private async processCoffeePunchCards(
@@ -380,7 +543,10 @@ export class OrdersService {
       total: Number(order.total),
       pointsEarned: order.pointsEarned,
       createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
       completedAt: order.completedAt,
+      storeId: order.storeId ?? null,
+      nextStatuses: nextStatuses(order),
       items: order.items.map((item: any) => ({
         id: item.id,
         quantity: item.quantity,

@@ -62,7 +62,7 @@ export class LoyaltyController {
   @Get('staff/customer/:qrCode')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'SUPPORT')
+  @Roles('ADMIN', 'SUPPORT', 'STORE_STAFF')
   @ApiOperation({ summary: 'Find customer and punch cards by QR code (Staff)' })
   @ApiParam({ name: 'qrCode', description: 'Customer QR code' })
   findCustomer(@Param('qrCode') qrCode: string) {
@@ -72,7 +72,7 @@ export class LoyaltyController {
   @Post('staff/claim')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'SUPPORT')
+  @Roles('ADMIN', 'SUPPORT', 'STORE_STAFF')
   @ApiOperation({
     summary: 'Give out free coffee for a completed punch card (Staff)',
   })

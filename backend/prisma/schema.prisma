@@ -12,6 +12,7 @@ enum UserRole {
   CLIENT
   ADMIN
   SUPPORT
+  STORE_STAFF // works in one store: handles its orders and the cash desk
 }
 
 enum OrderStatus {
@@ -32,250 +33,266 @@ enum PromotionType {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  phone         String    @unique
-  password      String?
-  firstName     String?
-  lastName      String?
-  email         String?   @unique
-  avatar        String?
-  birthDate     DateTime?
-  role          UserRole  @default(CLIENT)
-  isActive      Boolean   @default(true)
-  fcmToken      String?
+  id        String    @id @default(uuid())
+  phone     String    @unique
+  password  String?
+  firstName String?
+  lastName  String?
+  email     String?   @unique
+  avatar    String?
+  birthDate DateTime?
+  role      UserRole  @default(CLIENT)
+  isActive  Boolean   @default(true)
+  fcmToken  String?
 
   // Loyalty program
-  loyaltyPoints Int       @default(0)
-  qrCode        String    @unique @default(uuid())
+  loyaltyPoints Int    @default(0)
+  qrCode        String @unique @default(uuid())
+
+  // Staff: the store this employee works in (STORE_STAFF)
+  storeId String?
+  store   Store?  @relation("StoreStaff", fields: [storeId], references: [id])
+
+  // ID of the matching record in an external system (e.g. 1C client card)
+  externalId String? @unique
 
   // Metadata
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  lastLoginAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLoginAt DateTime?
 
   // Relations
-  orders          Order[]
-  addresses       Address[]
-  favorites       Favorite[]
-  reviews         Review[]
-  notifications   Notification[]
-  chatMessages    ChatMessage[]
-  raffleEntries   RaffleEntry[]
-  punchCards      CoffeePunchCard[]
+  orders        Order[]
+  addresses     Address[]
+  favorites     Favorite[]
+  reviews       Review[]
+  notifications Notification[]
+  chatMessages  ChatMessage[]
+  raffleEntries RaffleEntry[]
+  punchCards    CoffeePunchCard[]
 
   @@map("users")
 }
 
 model Category {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   name        String
   nameKy      String?
   nameRu      String?
   description String?
   image       String?
   icon        String?
-  sortOrder   Int       @default(0)
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  externalId  String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  products    Product[]
+  products Product[]
 
   @@map("categories")
 }
 
 model Product {
-  id             String      @id @default(uuid())
-  name           String
-  nameKy         String?
-  nameRu         String?
-  description    String?
-  descriptionKy  String?
-  descriptionRu  String?
-  price          Decimal     @db.Decimal(10, 2)
-  discountPrice  Decimal?    @db.Decimal(10, 2)
-  images         String[]
-  ingredients    String?
-  weight         Int?
-  calories       Int?
-  isAvailable    Boolean     @default(true)
-  isNew          Boolean     @default(false)
-  isBestseller   Boolean     @default(false)
-  sortOrder      Int         @default(0)
-  coffeeSize     CoffeeSize? // For punch card tracking (S/M/L)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id            String      @id @default(uuid())
+  name          String
+  nameKy        String?
+  nameRu        String?
+  description   String?
+  descriptionKy String?
+  descriptionRu String?
+  price         Decimal     @db.Decimal(10, 2)
+  discountPrice Decimal?    @db.Decimal(10, 2)
+  images        String[]
+  ingredients   String?
+  weight        Int?
+  calories      Int?
+  isAvailable   Boolean     @default(true)
+  isNew         Boolean     @default(false)
+  isBestseller  Boolean     @default(false)
+  sortOrder     Int         @default(0)
+  coffeeSize    CoffeeSize? // For punch card tracking (S/M/L)
+  externalId    String?     @unique
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  categoryId     String
-  category       Category    @relation(fields: [categoryId], references: [id])
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
 
-  orderItems     OrderItem[]
-  favorites      Favorite[]
-  reviews        Review[]
+  orderItems OrderItem[]
+  favorites  Favorite[]
+  reviews    Review[]
 
   @@map("products")
 }
 
 model Store {
-  id          String    @id @default(uuid())
-  name        String
-  nameKy      String?
-  nameRu      String?
-  address     String
-  addressKy   String?
-  addressRu   String?
-  latitude    Decimal   @db.Decimal(10, 8)
-  longitude   Decimal   @db.Decimal(11, 8)
-  phone       String
-  workHours   String
-  isActive    Boolean   @default(true)
-  image       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id         String   @id @default(uuid())
+  name       String
+  nameKy     String?
+  nameRu     String?
+  address    String
+  addressKy  String?
+  addressRu  String?
+  latitude   Decimal  @db.Decimal(10, 8)
+  longitude  Decimal  @db.Decimal(11, 8)
+  phone      String
+  workHours  String
+  isActive   Boolean  @default(true)
+  image      String?
+  externalId String?  @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  orders      Order[]
+  orders Order[]
+  staff  User[]  @relation("StoreStaff")
 
   @@map("stores")
 }
 
 model Address {
-  id          String    @id @default(uuid())
-  name        String
-  street      String
-  apartment   String?
-  entrance    String?
-  floor       String?
-  intercom    String?
-  latitude    Decimal?  @db.Decimal(10, 8)
-  longitude   Decimal?  @db.Decimal(11, 8)
-  isDefault   Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  street    String
+  apartment String?
+  entrance  String?
+  floor     String?
+  intercom  String?
+  latitude  Decimal? @db.Decimal(10, 8)
+  longitude Decimal? @db.Decimal(11, 8)
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  orders      Order[]
+  orders Order[]
 
   @@map("addresses")
 }
 
 model Order {
-  id              String      @id @default(uuid())
-  orderNumber     String      @unique
-  status          OrderStatus @default(PENDING)
+  id          String      @id @default(uuid())
+  orderNumber String      @unique
+  status      OrderStatus @default(PENDING)
 
-  subtotal        Decimal     @db.Decimal(10, 2)
-  deliveryFee     Decimal     @db.Decimal(10, 2) @default(0)
-  discount        Decimal     @db.Decimal(10, 2) @default(0)
-  pointsUsed      Int         @default(0)
-  pointsDiscount  Decimal     @db.Decimal(10, 2) @default(0)
-  total           Decimal     @db.Decimal(10, 2)
-  pointsEarned    Int         @default(0)
+  subtotal       Decimal @db.Decimal(10, 2)
+  deliveryFee    Decimal @default(0) @db.Decimal(10, 2)
+  discount       Decimal @default(0) @db.Decimal(10, 2)
+  pointsUsed     Int     @default(0)
+  pointsDiscount Decimal @default(0) @db.Decimal(10, 2)
+  total          Decimal @db.Decimal(10, 2)
+  pointsEarned   Int     @default(0)
 
-  deliveryType    String
-  deliveryTime    DateTime?
-  comment         String?
+  deliveryType String
+  deliveryTime DateTime?
+  comment      String?
 
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  completedAt     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+  externalId  String?   @unique
 
-  userId          String
-  user            User        @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  addressId       String?
-  address         Address?    @relation(fields: [addressId], references: [id])
+  addressId String?
+  address   Address? @relation(fields: [addressId], references: [id])
 
-  storeId         String?
-  store           Store?      @relation(fields: [storeId], references: [id])
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
 
-  items           OrderItem[]
+  // Store that fulfils the order: chosen by the client for pickup,
+  // assigned by an admin for delivery
+  items OrderItem[]
 
+  @@index([storeId, status, createdAt])
+  @@index([updatedAt])
   @@map("orders")
 }
 
 model OrderItem {
-  id          String    @id @default(uuid())
-  quantity    Int
-  price       Decimal   @db.Decimal(10, 2)
-  total       Decimal   @db.Decimal(10, 2)
+  id       String  @id @default(uuid())
+  quantity Int
+  price    Decimal @db.Decimal(10, 2)
+  total    Decimal @db.Decimal(10, 2)
 
-  orderId     String
-  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  productId   String
-  product     Product   @relation(fields: [productId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
 
   @@map("order_items")
 }
 
 model Promotion {
-  id              String        @id @default(uuid())
-  title           String
-  titleKy         String?
-  titleRu         String?
-  description     String
-  descriptionKy   String?
-  descriptionRu   String?
-  image           String
-  type            PromotionType
+  id            String        @id @default(uuid())
+  title         String
+  titleKy       String?
+  titleRu       String?
+  description   String
+  descriptionKy String?
+  descriptionRu String?
+  image         String
+  type          PromotionType
 
   discountPercent Int?
   cashbackPercent Int?
 
-  minOrderAmount  Decimal?      @db.Decimal(10, 2)
-  productIds      String[]
+  minOrderAmount Decimal? @db.Decimal(10, 2)
+  productIds     String[]
 
-  startDate       DateTime
-  endDate         DateTime
-  isActive        Boolean       @default(true)
-  sortOrder       Int           @default(0)
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
 
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("promotions")
 }
 
 model Raffle {
-  id                String        @id @default(uuid())
-  title             String
-  titleKy           String?
-  titleRu           String?
-  description       String
-  descriptionKy     String?
-  descriptionRu     String?
-  image             String
-  prize             String
+  id            String  @id @default(uuid())
+  title         String
+  titleKy       String?
+  titleRu       String?
+  description   String
+  descriptionKy String?
+  descriptionRu String?
+  image         String
+  prize         String
 
   minPointsRequired Int?
-  minPurchaseAmount Decimal?      @db.Decimal(10, 2)
+  minPurchaseAmount Decimal? @db.Decimal(10, 2)
 
-  startDate         DateTime
-  endDate           DateTime
-  drawDate          DateTime
-  isActive          Boolean       @default(true)
-  winnerId          String?
+  startDate DateTime
+  endDate   DateTime
+  drawDate  DateTime
+  isActive  Boolean  @default(true)
+  winnerId  String?
 
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  entries           RaffleEntry[]
+  entries RaffleEntry[]
 
   @@map("raffles")
 }
 
 model RaffleEntry {
-  id          String    @id @default(uuid())
+  id String @id @default(uuid())
 
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  raffleId    String
-  raffle      Raffle    @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  raffleId String
+  raffle   Raffle @relation(fields: [raffleId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime  @default(now())
+  createdAt DateTime @default(now())
 
   @@unique([userId, raffleId])
   @@map("raffle_entries")
@@ -295,20 +312,20 @@ model NewsArticle {
   views       Int       @default(0)
   sortOrder   Int       @default(0)
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("news_articles")
 }
 
 model Favorite {
-  id        String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -317,15 +334,15 @@ model Favorite {
 }
 
 model Review {
-  id        String   @id @default(uuid())
-  rating    Int
-  comment   String?
+  id      String  @id @default(uuid())
+  rating  Int
+  comment String?
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   productId String
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -334,13 +351,13 @@ model Review {
 }
 
 model ChatMessage {
-  id        String   @id @default(uuid())
-  message   String
+  id         String  @id @default(uuid())
+  message    String
   isFromUser Boolean @default(true)
-  isRead    Boolean  @default(false)
+  isRead     Boolean @default(false)
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -348,19 +365,19 @@ model ChatMessage {
 }
 
 model Notification {
-  id        String   @id @default(uuid())
-  title     String
-  titleKy   String?
-  titleRu   String?
-  body      String
-  bodyKy    String?
-  bodyRu    String?
-  type      String
-  data      String?
-  isRead    Boolean  @default(false)
+  id      String  @id @default(uuid())
+  title   String
+  titleKy String?
+  titleRu String?
+  body    String
+  bodyKy  String?
+  bodyRu  String?
+  type    String
+  data    String?
+  isRead  Boolean @default(false)
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
@@ -368,13 +385,13 @@ model Notification {
 }
 
 model Settings {
-  id          String   @id @default(uuid())
-  key         String   @unique
+  id          String  @id @default(uuid())
+  key         String  @unique
   value       String
   description String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("settings")
 }
@@ -386,19 +403,33 @@ enum CoffeeSize {
 }
 
 model CoffeePunchCard {
-  id              String      @id @default(uuid())
+  id              String     @id @default(uuid())
   size            CoffeeSize
-  currentPunches  Int         @default(0)
-  maxPunches      Int         @default(6)
-  freeItemClaimed Boolean     @default(false)
+  currentPunches  Int        @default(0)
+  maxPunches      Int        @default(6)
+  freeItemClaimed Boolean    @default(false)
 
-  userId          String
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  completedAt     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
 
   @@unique([userId, size])
   @@map("coffee_punch_cards")
+}
+
+// Outbox of domain events for external systems (1C and others).
+// Written in the same transaction as the change it describes; a consumer
+// reads events in id order and remembers the last id it processed.
+model IntegrationEvent {
+  id          BigInt   @id @default(autoincrement())
+  type        String // e.g. order.created, order.status_changed
+  aggregateId String // id of the order / user / transaction
+  payload     Json
+  createdAt   DateTime @default(now())
+
+  @@index([type, id])
+  @@map("integration_events")
 }

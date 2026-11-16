@@ -72,6 +72,11 @@ async function main() {
       { key: 'support_phone', value: '+996701039009', description: 'Телефон поддержки' },
       { key: 'support_email', value: 'support@shirin.kg', description: 'Email поддержки' },
       { key: 'work_hours', value: '09:00-21:00', description: 'Часы работы' },
+      {
+        key: 'catalog_master',
+        value: 'APP',
+        description: 'Кто ведёт цены и наличие: APP (админка) или ONE_C (1С)',
+      },
     ],
     skipDuplicates: true,
   });
@@ -935,14 +940,28 @@ async function main() {
   });
   console.log('Raffle created');
 
+  // Store employee for the main store (dev only: login works with the SMS stub)
+  const staff = await prisma.user.upsert({
+    where: { phone: '+996700222222' },
+    update: {},
+    create: {
+      phone: '+996700222222',
+      firstName: 'Сотрудник',
+      lastName: 'Точки',
+      role: 'STORE_STAFF',
+      storeId: IDS.STORE_MAIN,
+    },
+  });
+  console.log('Store staff created:', staff.phone);
+
   console.log('\n✅ Database seeded successfully!');
   console.log('   - 6 categories');
   console.log('   - 28 products');
   console.log('   - 3 stores');
   console.log('   - 3 promotions');
   console.log('   - 1 raffle');
-  console.log('   - 9 settings');
-  console.log('   - 2 users (admin + test)');
+  console.log('   - 10 settings');
+  console.log('   - 3 users (admin, test client, store staff)');
 }
 
 main()

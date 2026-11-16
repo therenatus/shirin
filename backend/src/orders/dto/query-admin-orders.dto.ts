@@ -1,6 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { OrderStatus } from '@prisma/client';
 
 export class QueryAdminOrdersDto {
@@ -23,4 +32,29 @@ export class QueryAdminOrdersDto {
   @IsOptional()
   @IsEnum(OrderStatus)
   status?: OrderStatus;
+
+  @ApiPropertyOptional({
+    description: 'Filter by store (admin only; staff always see their store)',
+  })
+  @IsOptional()
+  @IsUUID()
+  storeId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Only orders without a store (delivery orders to assign)',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  unassigned?: boolean;
+
+  @ApiPropertyOptional({ description: 'Created at or after (ISO date)' })
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Created before (ISO date)' })
+  @IsOptional()
+  @IsDateString()
+  to?: string;
 }
