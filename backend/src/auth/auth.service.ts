@@ -205,6 +205,11 @@ export class AuthService {
         // Token already invalid — nothing to revoke
       }
     }
+    // Stop pushes to this device: nobody is signed in on it any more
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { fcmToken: null },
+    });
     return { success: true };
   }
 

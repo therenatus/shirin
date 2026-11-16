@@ -67,6 +67,7 @@ describe('AuthService', () => {
       user: {
         upsert: jest.fn().mockResolvedValue(USER),
         findUnique: jest.fn().mockResolvedValue({ isActive: true }),
+        update: jest.fn(),
       },
     };
     sms = {
@@ -218,6 +219,14 @@ describe('AuthService', () => {
       await expect(
         service.refreshToken(next.refreshToken),
       ).resolves.toBeDefined();
+    });
+
+    it('logout stops pushes to the device', async () => {
+      await service.logout('user-1');
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { fcmToken: null },
+      });
     });
 
     it('logout revokes the refresh token', async () => {
