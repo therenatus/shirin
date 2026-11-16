@@ -9,6 +9,7 @@ import {
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { UserRole } from '@prisma/client';
+import { parseBool } from '../../common/parse-bool';
 
 export class QueryStaffDto {
   @ApiPropertyOptional({ description: 'Part of phone number or name' })
@@ -22,7 +23,7 @@ export class QueryStaffDto {
     default: true,
   })
   @IsOptional()
-  @Transform(({ value }) => value !== 'false' && value !== false)
+  @Transform(({ obj, key }) => parseBool(obj[key], true))
   @IsBoolean()
   staffOnly?: boolean = true;
 }

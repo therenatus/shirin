@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { OrderStatus } from '@prisma/client';
+import { parseBool } from '../../common/parse-bool';
 
 export class QueryAdminOrdersDto {
   @ApiPropertyOptional({ default: 1 })
@@ -44,7 +45,7 @@ export class QueryAdminOrdersDto {
     description: 'Only orders without a store (delivery orders to assign)',
   })
   @IsOptional()
-  @Transform(({ value }) => value === true || value === 'true')
+  @Transform(({ obj, key }) => parseBool(obj[key], false))
   @IsBoolean()
   unassigned?: boolean;
 

@@ -37,6 +37,7 @@ export class UsersService {
         qrCode: true,
         createdAt: true,
         role: true,
+        store: { select: { id: true, name: true } },
       },
     });
 

@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, IsNumber, IsEnum, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { parseBool } from '../../common/parse-bool';
 
 export enum ProductSortBy {
   PRICE_ASC = 'price_asc',
@@ -40,17 +41,17 @@ export class QueryProductsDto {
   limit?: number = 20;
 
   @ApiPropertyOptional()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ obj, key }) => parseBool(obj[key], false) || undefined)
   @IsOptional()
   isNew?: boolean;
 
   @ApiPropertyOptional()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ obj, key }) => parseBool(obj[key], false) || undefined)
   @IsOptional()
   isBestseller?: boolean;
 
   @ApiPropertyOptional()
-  @Transform(({ value }) => value === 'true')
+  @Transform(({ obj, key }) => parseBool(obj[key], false) || undefined)
   @IsOptional()
   hasDiscount?: boolean;
 
