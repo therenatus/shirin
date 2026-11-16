@@ -49,3 +49,6 @@ mobile/.fvm/
 *.sqlite
 
 # Prisma
+
+# Database dumps (contain personal data)
+/backups/

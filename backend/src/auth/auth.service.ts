@@ -12,6 +12,7 @@ import { randomUUID, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SmsService } from '../sms/sms.service';
+import { AlertsService } from '../alerts/alerts.service';
 import { SendCodeDto } from './dto/send-code.dto';
 import { VerifyCodeDto } from './dto/verify-code.dto';
 
@@ -44,6 +45,7 @@ export class AuthService {
     private configService: ConfigService,
     private redis: RedisService,
     private sms: SmsService,
+    private alerts: AlertsService,
   ) {}
 
   async sendCode(dto: SendCodeDto) {
@@ -75,6 +77,10 @@ export class AuthService {
     const totalSent = await this.redis.incr(this.smsTotalKey(), DAY);
     if (totalSent > this.smsDailyLimit()) {
       this.logger.error('Daily SMS limit reached: login codes are not sent');
+      void this.alerts.alert(
+        'sms-daily-limit',
+        `Достигнут суточный лимит SMS (${this.smsDailyLimit()}): клиенты не могут войти. Проверьте, не атака ли это, и при необходимости поднимите SMS_DAILY_LIMIT.`,
+      );
       throw new ServiceUnavailableException(
         'Login is temporarily unavailable, try again later',
       );
@@ -96,6 +102,10 @@ export class AuthService {
       await this.redis.decr(this.smsPerPhoneKey(dto.phone));
       await this.redis.decr(this.smsTotalKey());
       this.logger.error((err as Error).message);
+      void this.alerts.alert(
+        'sms-send-failed',
+        `SMS-провайдер не отправил код входа: ${(err as Error).message}`,
+      );
       throw new ServiceUnavailableException('Failed to send SMS');
     }
 

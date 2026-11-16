@@ -37,6 +37,29 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
 
+  # Daily database dump to BACKUP_DIR (see infra/backup/*.sh)
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup/backup-loop.sh"]
+    environment:
+      TZ: Asia/Bishkek
+      PGHOST: postgres
+      PGUSER: shirin_user
+      PGPASSWORD: ${DB_PASSWORD}
+      PGDATABASE: shirin_db
+      BACKUP_HOUR: ${BACKUP_HOUR:-3}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      BACKUP_PING_URL: ${BACKUP_PING_URL:-}
+      ALERT_TELEGRAM_BOT_TOKEN: ${ALERT_TELEGRAM_BOT_TOKEN:-}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+    volumes:
+      - ./infra/backup:/backup:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [shirin]
+
   seaweedfs:
     image: chrislusf/seaweedfs:4.53
     restart: unless-stopped
@@ -90,6 +113,9 @@ services:
       S3_PUBLIC_URL: ${S3_PUBLIC_URL:?S3_PUBLIC_URL is required}
       PRIVACY_CONTACT_EMAIL: ${PRIVACY_CONTACT_EMAIL}
       FIREBASE_SERVICE_ACCOUNT_BASE64: ${FIREBASE_SERVICE_ACCOUNT_BASE64}
+      ALERT_TELEGRAM_BOT_TOKEN: ${ALERT_TELEGRAM_BOT_TOKEN:-}
+      ALERT_TELEGRAM_CHAT_ID: ${ALERT_TELEGRAM_CHAT_ID:-}
+      ALERT_ENV_NAME: production
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:

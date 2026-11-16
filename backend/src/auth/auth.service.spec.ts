@@ -75,7 +75,9 @@ describe('AuthService', () => {
       generateCode: jest.fn(() => '9999'),
       sendCode: jest.fn().mockResolvedValue(undefined),
     };
-    service = new AuthService(prisma, jwt, config, redis as any, sms);
+    service = new AuthService(prisma, jwt, config, redis as any, sms, {
+      alert: jest.fn(),
+    } as any);
     jest.spyOn((service as any).logger, 'error').mockImplementation(() => {});
   });
 

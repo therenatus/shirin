@@ -1,13 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { OrdersService } from './orders.service';
+import { AlertsService } from '../alerts/alerts.service';
 
 @Injectable()
 export class OrdersScheduler {
   private readonly logger = new Logger(OrdersScheduler.name);
   private running = false;
 
-  constructor(private ordersService: OrdersService) {}
+  constructor(
+    private ordersService: OrdersService,
+    private alerts: AlertsService,
+  ) {}
 
   /** Cancels made-to-order orders whose prepayment did not arrive in time. */
   @Cron(CronExpression.EVERY_MINUTE)
@@ -21,6 +25,10 @@ export class OrdersScheduler {
       }
     } catch (e) {
       this.logger.error(`Unpaid order cleanup failed: ${(e as Error).message}`);
+      void this.alerts.alert(
+        'unpaid-cleanup',
+        `Не работает автоотмена неоплаченных заказов: ${(e as Error).message}`,
+      );
     } finally {
       this.running = false;
     }
