@@ -101,6 +101,50 @@ void main() {
 
     if (await tapNav(tester, '/cart')) {
       await shot(tester, '06-cart');
+
+      // Checkout: store, date/time (needed for made-to-order cakes), place
+      final checkout = find.text('Оформить заказ');
+      if (checkout.evaluate().isNotEmpty) {
+        await tester.tap(checkout.first);
+        await settle(tester, 3000);
+        await shot(tester, '06b-checkout');
+
+        final pickStore = find.text('Выберите точку');
+        if (pickStore.evaluate().isNotEmpty) {
+          await tester.tap(pickStore.first);
+          await settle(tester, 1500);
+          await shot(tester, '06c-store-sheet');
+          // First store tile inside the sheet (the page tile is behind it)
+          final storeIcons = find.byIcon(Icons.storefront_rounded);
+          await tester.tap(storeIcons.last);
+          await settle(tester, 2500);
+        }
+
+        final pickDate = find.text('Выберите дату и время');
+        if (pickDate.evaluate().isNotEmpty) {
+          await tester.tap(pickDate.first);
+          await settle(tester, 1500);
+          await shot(tester, '06d-date-picker');
+          for (final step in ['date', 'time']) {
+            final ok = find.byWidgetPredicate(
+              (w) =>
+                  w is Text &&
+                  (w.data == 'ОК' || w.data == 'OK' || w.data == 'ОК'),
+            );
+            if (ok.evaluate().isEmpty) break;
+            await tester.tap(ok.last);
+            await settle(tester, step == 'date' ? 1500 : 3000);
+          }
+        }
+        await shot(tester, '06e-checkout-filled');
+
+        final place = find.text('Оформить заказ');
+        if (place.evaluate().isNotEmpty) {
+          await tester.tap(place.last);
+          await settle(tester, 4000);
+          await shot(tester, '06f-order-created');
+        }
+      }
     }
     if (await tapNav(tester, '/profile')) {
       await settle(tester, 1500);
@@ -117,7 +161,11 @@ void main() {
           await settle(tester, 300);
           await tester.tap(find.text('Сохранить'));
           await settle(tester, 2500);
-          expect(find.text('О себе'), findsNothing, reason: 'edit sheet should close after saving');
+          expect(
+            find.text('О себе'),
+            findsNothing,
+            reason: 'edit sheet should close after saving',
+          );
           expect(find.text('Айгерим Асанова'), findsOneWidget);
           await shot(tester, '07c-profile-saved');
         }

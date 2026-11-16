@@ -93,7 +93,7 @@ class _OrderPaymentCardState extends State<OrderPaymentCard> {
             ],
             const SizedBox(height: 12),
             GlassButton(
-              label: 'Скопировать номер заказа ${orderDisplayNumber(order)}',
+              label: 'Скопировать номер заказа',
               icon: Icons.copy_rounded,
               expanded: true,
               onTap: () {

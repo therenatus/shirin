@@ -51,6 +51,7 @@ const FINAL_STATUSES: OrderStatus[] = [
 ];
 
 const ORDER_SEQ_TTL_SECONDS = 2 * 24 * 60 * 60;
+const ORDER_NUMBER_TIMEZONE = 'Asia/Bishkek';
 
 /** Allowed status changes; delivery/pickup specifics are in nextStatuses(). */
 const TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -889,7 +890,16 @@ export class OrdersService {
   }
 
   private async generateOrderNumber(): Promise<string> {
-    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    // Local business date (Bishkek, UTC+6), not UTC: orders placed after
+    // midnight must not get yesterday's date in their number
+    const dateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: ORDER_NUMBER_TIMEZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+      .format(new Date())
+      .replace(/-/g, '');
     // Atomic per-day counter; unique even for concurrent orders
     const seq = await this.redis.incr(
       `order:seq:${dateStr}`,
