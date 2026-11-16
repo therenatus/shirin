@@ -16,6 +16,8 @@ extension OrderStatusStyle on OrderStatus {
         return AppColors.primary;
       case OrderStatus.ready:
         return AppColors.success;
+      case OrderStatus.delivering:
+        return AppColors.primary;
       case OrderStatus.delivered:
         return AppColors.success;
       case OrderStatus.cancelled:
@@ -33,6 +35,8 @@ extension OrderStatusStyle on OrderStatus {
         return Icons.restaurant_rounded;
       case OrderStatus.ready:
         return Icons.check_circle_rounded;
+      case OrderStatus.delivering:
+        return Icons.delivery_dining_rounded;
       case OrderStatus.delivered:
         return Icons.done_all_rounded;
       case OrderStatus.cancelled:
@@ -50,8 +54,10 @@ extension OrderStatusStyle on OrderStatus {
         return 'Готовится';
       case OrderStatus.ready:
         return 'Готов';
+      case OrderStatus.delivering:
+        return 'В пути';
       case OrderStatus.delivered:
-        return 'Доставлен';
+        return 'Выполнен';
       case OrderStatus.cancelled:
         return 'Отменён';
     }
@@ -66,9 +72,11 @@ extension OrderStatusStyle on OrderStatus {
       case OrderStatus.preparing:
         return 'Готовим ваш заказ';
       case OrderStatus.ready:
-        return 'Заказ готов к выдаче';
+        return 'Заказ готов';
+      case OrderStatus.delivering:
+        return 'Курьер везёт заказ';
       case OrderStatus.delivered:
-        return 'Заказ доставлен';
+        return 'Заказ получен';
       case OrderStatus.cancelled:
         return 'Заказ был отменён';
     }

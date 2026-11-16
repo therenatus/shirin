@@ -22,17 +22,34 @@ class CartBloc extends Bloc<CartEvent, CartState> {
 
   Future<void> _onAddToCart(AddToCart event, Emitter<CartState> emit) async {
     final currentItems = _getCurrentItems();
-    final existingIndex =
-        currentItems.indexWhere((item) => item.product.id == event.product.id);
+    final customised = (event.inscription?.isNotEmpty ?? false) ||
+        (event.wishes?.isNotEmpty ?? false) ||
+        event.referencePhotoUrl != null;
+    // Plain items merge into one line per product; custom ones never merge
+    final existingIndex = customised
+        ? -1
+        : currentItems.indexWhere((item) => item.lineId == event.product.id);
 
     List<CartItem> updatedItems;
     if (existingIndex >= 0) {
       updatedItems = List.from(currentItems);
       updatedItems[existingIndex] = currentItems[existingIndex].copyWith(
-        quantity: currentItems[existingIndex].quantity + 1,
+        quantity: currentItems[existingIndex].quantity + event.quantity,
       );
     } else {
-      updatedItems = [...currentItems, CartItem(product: event.product)];
+      updatedItems = [
+        ...currentItems,
+        CartItem(
+          lineId: customised
+              ? '${event.product.id}#${DateTime.now().microsecondsSinceEpoch}'
+              : event.product.id,
+          product: event.product,
+          quantity: event.quantity,
+          inscription: event.inscription,
+          wishes: event.wishes,
+          referencePhotoUrl: event.referencePhotoUrl,
+        ),
+      ];
     }
 
     await _localDatasource.saveCartItems(updatedItems);
@@ -43,7 +60,7 @@ class CartBloc extends Bloc<CartEvent, CartState> {
       RemoveFromCart event, Emitter<CartState> emit) async {
     final currentItems = _getCurrentItems();
     final updatedItems =
-        currentItems.where((item) => item.product.id != event.productId).toList();
+        currentItems.where((item) => item.lineId != event.lineId).toList();
     await _localDatasource.saveCartItems(updatedItems);
     emit(CartLoaded(items: updatedItems));
   }
@@ -53,14 +70,14 @@ class CartBloc extends Bloc<CartEvent, CartState> {
     final currentItems = _getCurrentItems();
     if (event.quantity <= 0) {
       final updatedItems =
-          currentItems.where((item) => item.product.id != event.productId).toList();
+          currentItems.where((item) => item.lineId != event.lineId).toList();
       await _localDatasource.saveCartItems(updatedItems);
       emit(CartLoaded(items: updatedItems));
       return;
     }
 
     final updatedItems = currentItems.map((item) {
-      if (item.product.id == event.productId) {
+      if (item.lineId == event.lineId) {
         return item.copyWith(quantity: event.quantity);
       }
       return item;

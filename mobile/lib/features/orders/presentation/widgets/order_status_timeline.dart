@@ -11,15 +11,23 @@ import 'order_status_style.dart';
 class OrderStatusTimeline extends StatelessWidget {
   final OrderStatus currentStatus;
 
-  const OrderStatusTimeline({super.key, required this.currentStatus});
+  /// Delivery orders have an extra "on the way" step.
+  final bool isDelivery;
 
-  static const _steps = [
-    OrderStatus.pending,
-    OrderStatus.confirmed,
-    OrderStatus.preparing,
-    OrderStatus.ready,
-    OrderStatus.delivered,
-  ];
+  const OrderStatusTimeline({
+    super.key,
+    required this.currentStatus,
+    this.isDelivery = false,
+  });
+
+  List<OrderStatus> get _steps => [
+        OrderStatus.pending,
+        OrderStatus.confirmed,
+        OrderStatus.preparing,
+        OrderStatus.ready,
+        if (isDelivery) OrderStatus.delivering,
+        OrderStatus.delivered,
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +80,7 @@ class OrderStatusTimeline extends StatelessWidget {
           ),
           if (!isCancelled) ...[
             const SizedBox(height: 20),
-            _Track(current: _steps.indexOf(currentStatus)),
+            _Track(steps: _steps, current: _steps.indexOf(currentStatus)),
           ],
         ],
       ),
@@ -81,12 +89,12 @@ class OrderStatusTimeline extends StatelessWidget {
 }
 
 class _Track extends StatelessWidget {
+  final List<OrderStatus> steps;
   final int current;
-  const _Track({required this.current});
+  const _Track({required this.steps, required this.current});
 
   @override
   Widget build(BuildContext context) {
-    final steps = OrderStatusTimeline._steps;
     return Column(
       children: [
         // Dots joined by segments.

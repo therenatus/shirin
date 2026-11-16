@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
@@ -39,6 +40,11 @@ class _ProductCardState extends State<ProductCard> {
   final GlobalKey _imageKey = GlobalKey();
 
   void _add() {
+    // Custom cakes need a date and wishes: open the product page instead
+    if (widget.product.isPreorder) {
+      context.push('/product/${widget.product.id}');
+      return;
+    }
     final provider = CartAnimationProvider.of(context);
     if (provider != null) {
       provider.controller.animateToCart(
@@ -177,7 +183,7 @@ class _CartControl extends StatelessWidget {
       builder: (context, state) {
         final qty = state is CartLoaded
             ? state.items
-                .where((i) => i.product.id == p.id)
+                .where((i) => i.lineId == p.id)
                 .fold<int>(0, (s, i) => s + i.quantity)
             : 0;
         if (qty > 0) {
@@ -190,7 +196,7 @@ class _CartControl extends StatelessWidget {
                 context.read<CartBloc>().add(RemoveFromCart(p.id));
               } else {
                 context.read<CartBloc>().add(
-                      UpdateQuantity(productId: p.id, quantity: q),
+                      UpdateQuantity(lineId: p.id, quantity: q),
                     );
               }
             },

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import '../constants/api_endpoints.dart';
 import '../error/exceptions.dart';
@@ -21,14 +22,15 @@ class ApiClient {
           ),
         ) {
     authInterceptor.setDio(_dio);
-    _dio.interceptors.addAll([
-      authInterceptor,
-      PrettyDioLogger(
+    _dio.interceptors.add(authInterceptor);
+    // Logs headers (tokens) and bodies: never in release builds
+    if (kDebugMode) {
+      _dio.interceptors.add(PrettyDioLogger(
         requestHeader: true,
         requestBody: true,
         responseBody: true,
-      ),
-    ]);
+      ));
+    }
   }
 
   Future<Response> get(

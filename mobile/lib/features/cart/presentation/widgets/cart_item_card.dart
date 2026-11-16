@@ -70,6 +70,22 @@ class CartItemCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.caption,
                   ),
+                  if (item.inscription != null)
+                    Text(
+                      'Надпись: «${item.inscription}»',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption.copyWith(color: AppColors.textPrimary),
+                    ),
+                  if (item.wishes != null)
+                    Text(
+                      item.wishes!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption,
+                    ),
+                  if (item.referencePhotoUrl != null)
+                    Text('С фото-образцом', style: AppTextStyles.caption),
                   const SizedBox(height: 10),
                   Row(
                     children: [

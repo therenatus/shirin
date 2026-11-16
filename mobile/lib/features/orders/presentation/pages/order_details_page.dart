@@ -6,7 +6,10 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../shared/widgets/liquid_glass/liquid_glass_kit.dart';
 import '../../../../shared/widgets/ui_kit.dart';
+import '../../../../core/di/injection_container.dart';
 import '../../domain/entities/order.dart';
+import '../../domain/usecases/cancel_order.dart';
+import '../widgets/order_payment_card.dart';
 import '../bloc/orders_bloc.dart';
 import '../widgets/order_status_style.dart';
 import '../widgets/order_status_timeline.dart';
@@ -52,19 +55,28 @@ class OrderDetailsPage extends StatelessWidget {
     return GlassPage(
       title: 'Заказ #${orderDisplayNumber(order)}',
       eyebrow: _formatFullDate(order.createdAt),
-      bottomBar: canCancel ? _CancelButton(onTap: () => _showCancelDialog(context)) : null,
+      bottomBar: canCancel
+          ? _CancelButton(onTap: () => _showCancelDialog(context, order))
+          : null,
+      onRefresh: () async =>
+          context.read<OrdersBloc>().add(LoadOrderDetails(order.id)),
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           sliver: SliverList.list(
             children: [
-              OrderStatusTimeline(currentStatus: order.status),
+              OrderStatusTimeline(
+                currentStatus: order.status,
+                isDelivery: order.isDelivery,
+              ),
+              if (order.paymentStatus != PaymentStatus.notRequired) ...[
+                const SizedBox(height: 16),
+                OrderPaymentCard(order: order),
+              ],
               const SizedBox(height: 16),
               _buildOrderItems(order),
-              if (order.address != null) ...[
-                const SizedBox(height: 16),
-                _buildDeliveryInfo(order),
-              ],
+              const SizedBox(height: 16),
+              _buildDeliveryInfo(order),
               const SizedBox(height: 16),
               _buildPriceSummary(order),
             ],
@@ -139,6 +151,16 @@ class OrderDetailsPage extends StatelessWidget {
                         '${formatPrice(order.items[i].price)} × ${order.items[i].quantity}',
                         style: AppTextStyles.caption,
                       ),
+                      if (order.items[i].inscription != null)
+                        Text(
+                          'Надпись: «${order.items[i].inscription}»',
+                          style: AppTextStyles.caption
+                              .copyWith(color: AppColors.textPrimary),
+                        ),
+                      if (order.items[i].wishes != null)
+                        Text(order.items[i].wishes!, style: AppTextStyles.caption),
+                      if (order.items[i].referencePhotoUrl != null)
+                        Text('С фото-образцом', style: AppTextStyles.caption),
                     ],
                   ),
                 ),
@@ -167,17 +189,39 @@ class OrderDetailsPage extends StatelessWidget {
               color: AppColors.primaryTint,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.location_on_rounded,
-                color: AppColors.primary, size: 22),
+            child: Icon(
+                order.isDelivery
+                    ? Icons.location_on_rounded
+                    : Icons.storefront_rounded,
+                color: AppColors.primary,
+                size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Адрес доставки', style: AppTextStyles.caption),
+                Text(order.isDelivery ? 'Адрес доставки' : 'Самовывоз',
+                    style: AppTextStyles.caption),
                 const SizedBox(height: 2),
-                Text(order.address!, style: AppTextStyles.label),
+                Text(
+                  order.isDelivery
+                      ? (order.address ?? '—')
+                      : [order.storeName, order.storeAddress]
+                          .whereType<String>()
+                          .join(', '),
+                  style: AppTextStyles.label,
+                ),
+                if (order.deliveryTime != null) ...[
+                  const SizedBox(height: 6),
+                  Text('Время: ${_formatFullDate(order.deliveryTime!)}',
+                      style: AppTextStyles.bodySmall),
+                ],
+                if (order.comment != null) ...[
+                  const SizedBox(height: 6),
+                  Text('Комментарий: ${order.comment}',
+                      style: AppTextStyles.bodySmall),
+                ],
               ],
             ),
           ),
@@ -192,8 +236,17 @@ class OrderDetailsPage extends StatelessWidget {
       child: Column(
         children: [
           _priceRow('Товары', formatPrice(_calculateSubtotal(order))),
-          const SizedBox(height: 10),
-          _priceRow('Доставка', 'Бесплатно', color: AppColors.success),
+          if (order.isDelivery) ...[
+            const SizedBox(height: 10),
+            order.deliveryFee > 0
+                ? _priceRow('Доставка', formatPrice(order.deliveryFee))
+                : _priceRow('Доставка', 'Бесплатно', color: AppColors.success),
+          ],
+          if (order.pointsUsed > 0) ...[
+            const SizedBox(height: 10),
+            _priceRow('Оплачено баллами', '−${formatPrice(order.pointsUsed)}',
+                color: AppColors.success),
+          ],
           const SizedBox(height: 14),
           const Divider(height: 1, color: AppColors.divider),
           const SizedBox(height: 14),
@@ -226,7 +279,28 @@ class OrderDetailsPage extends StatelessWidget {
     );
   }
 
-  void _showCancelDialog(BuildContext context) {
+  Future<void> _cancel(BuildContext context, Order order) async {
+    final bloc = context.read<OrdersBloc>();
+    final result = await sl<CancelOrder>()(order.id);
+    if (!context.mounted) return;
+    result.fold(
+      (failure) => showGlassToast(
+        context,
+        failure.message.contains('Cannot cancel')
+            ? 'Заказ уже готовится — отменить его можно только по телефону'
+            : 'Не удалось отменить: ${failure.message}',
+        icon: Icons.error_outline_rounded,
+        bottomOffset: 120,
+      ),
+      (_) {
+        showGlassToast(context, 'Заказ отменён',
+            icon: Icons.check_circle_rounded, bottomOffset: 120);
+        bloc.add(LoadOrderDetails(order.id));
+      },
+    );
+  }
+
+  void _showCancelDialog(BuildContext context, Order order) {
     HapticFeedback.mediumImpact();
     showGlassSheet<void>(
       context: context,
@@ -249,7 +323,9 @@ class OrderDetailsPage extends StatelessWidget {
             Text('Отменить заказ?', style: AppTextStyles.heading2),
             const SizedBox(height: 8),
             Text(
-              'Вы уверены, что хотите отменить этот заказ?\nЭто действие нельзя отменить.',
+              order.paymentStatus == PaymentStatus.paid
+                  ? 'Предоплату вернём — с вами свяжется менеджер. Баллы вернутся сразу.'
+                  : 'Вы уверены? Баллы, списанные за заказ, вернутся.',
               textAlign: TextAlign.center,
               style: AppTextStyles.bodySmall,
             ),
@@ -274,7 +350,7 @@ class OrderDetailsPage extends StatelessWidget {
                     ),
                     onTap: () {
                       Navigator.pop(ctx);
-                      // TODO: Cancel order
+                      _cancel(context, order);
                     },
                     child: Center(
                       child: Text('Отменить', style: AppTextStyles.button),

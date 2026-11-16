@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Камера нужна, чтобы сфотографировать образец торта для заказа.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Доступ к фото нужен, чтобы приложить образец торта к заказу.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>Приложению нужен доступ к вашему местоположению для отображения ближайших магазинов на карте.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

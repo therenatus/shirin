@@ -5,19 +5,29 @@ enum DeliveryType { delivery, pickup }
 class CreateOrderItemParams extends Equatable {
   final String productId;
   final int quantity;
+  final String? inscription;
+  final String? wishes;
+  final String? referencePhotoUrl;
 
   const CreateOrderItemParams({
     required this.productId,
     required this.quantity,
+    this.inscription,
+    this.wishes,
+    this.referencePhotoUrl,
   });
 
   Map<String, dynamic> toJson() => {
         'productId': productId,
         'quantity': quantity,
+        if (inscription != null && inscription!.isNotEmpty) 'inscription': inscription,
+        if (wishes != null && wishes!.isNotEmpty) 'wishes': wishes,
+        if (referencePhotoUrl != null) 'referencePhotoUrl': referencePhotoUrl,
       };
 
   @override
-  List<Object?> get props => [productId, quantity];
+  List<Object?> get props =>
+      [productId, quantity, inscription, wishes, referencePhotoUrl];
 }
 
 class CreateOrderParams extends Equatable {
@@ -44,8 +54,9 @@ class CreateOrderParams extends Equatable {
         'deliveryType': deliveryType == DeliveryType.delivery ? 'delivery' : 'pickup',
         if (addressId != null) 'addressId': addressId,
         if (storeId != null) 'storeId': storeId,
-        if (deliveryTime != null) 'deliveryTime': deliveryTime!.toIso8601String(),
-        if (comment != null) 'comment': comment,
+        if (deliveryTime != null)
+          'deliveryTime': deliveryTime!.toUtc().toIso8601String(),
+        if (comment != null && comment!.trim().isNotEmpty) 'comment': comment!.trim(),
         if (pointsToUse != null) 'pointsToUse': pointsToUse,
       };
 

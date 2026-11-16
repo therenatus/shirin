@@ -4,6 +4,7 @@ import '../../../../core/error/failures.dart';
 import '../../../auth/data/datasources/auth_local_datasource.dart';
 import '../../domain/entities/order.dart';
 import '../../domain/entities/create_order_params.dart';
+import '../../domain/entities/checkout_preview.dart';
 import '../../domain/repositories/orders_repository.dart';
 import '../datasources/orders_remote_datasource.dart';
 import '../models/order_item_model.dart';
@@ -83,6 +84,56 @@ class OrdersRepositoryImpl implements OrdersRepository {
     } on ServerException catch (e) {
       return Left(ServerFailure(e.message));
     }
+  }
+
+  /// Runs a remote call and maps transport errors to failures.
+  Future<Either<Failure, T>> _guard<T>(Future<T> Function() call) async {
+    try {
+      return Right(await call());
+    } on NetworkException {
+      return const Left(NetworkFailure());
+    } on UnauthorizedException {
+      return const Left(UnauthorizedFailure());
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  }
+
+  @override
+  Future<Either<Failure, CheckoutPreview>> previewOrder(
+      CreateOrderParams params) async {
+    if (await _isTestMode) {
+      return const Right(CheckoutPreview(
+        subtotal: 0,
+        deliveryFee: 0,
+        pointsUsed: 0,
+        maxPoints: 0,
+        total: 0,
+        pointsEarned: 0,
+        prepaymentAmount: 0,
+        earliestTime: null,
+        paymentTimeoutMinutes: 60,
+      ));
+    }
+    return _guard(() => _remoteDatasource.previewOrder(params));
+  }
+
+  @override
+  Future<Either<Failure, PaymentInfo>> getPaymentInfo() async {
+    if (await _isTestMode) return const Right(PaymentInfo());
+    return _guard(_remoteDatasource.getPaymentInfo);
+  }
+
+  @override
+  Future<Either<Failure, Order>> cancelOrder(String id) async {
+    if (await _isTestMode) return const Left(ServerFailure('Недоступно в тестовом режиме'));
+    return _guard(() async => (await _remoteDatasource.cancelOrder(id)).toEntity());
+  }
+
+  @override
+  Future<Either<Failure, String>> uploadReferencePhoto(String filePath) async {
+    if (await _isTestMode) return const Left(ServerFailure('Недоступно в тестовом режиме'));
+    return _guard(() => _remoteDatasource.uploadReferencePhoto(filePath));
   }
 
   List<Order> _getMockOrders() {

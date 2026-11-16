@@ -1,3 +1,8 @@
+import '../../features/cart/domain/entities/cart_item.dart';
+import '../../features/cart/presentation/bloc/cart_bloc.dart';
+import '../../features/cart/presentation/bloc/cart_state.dart';
+import '../../features/checkout/presentation/bloc/checkout_cubit.dart';
+import '../../features/checkout/presentation/pages/checkout_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
@@ -114,6 +119,20 @@ class AppRouter {
             pageBuilder: (context, state) => const NoTransitionPage(
               child: CartPage(),
             ),
+          ),
+          // Checkout (from the cart)
+          GoRoute(
+            path: '/checkout',
+            pageBuilder: (context, state) {
+              final cart = context.read<CartBloc>().state;
+              final items = cart is CartLoaded ? cart.items : <CartItem>[];
+              return MaterialPage(
+                child: BlocProvider(
+                  create: (_) => di.sl<CheckoutCubit>(param1: items)..init(),
+                  child: const CheckoutPage(),
+                ),
+              );
+            },
           ),
           // Profile tab
           GoRoute(

@@ -40,6 +40,9 @@ class ApiEndpoints {
   static const String loyaltyHistory = '/loyalty/history';
   static const String punchCards = '/loyalty/punch-cards';
   static const String loyaltyQrToken = '/loyalty/qr-token';
+  static const String orderPreview = '/orders/preview';
+  static const String orderPaymentInfo = '/orders/payment-info';
+  static const String referencePhoto = '/storage/reference-photo';
 
   // Promotions
   static const String promotions = '/promotions';

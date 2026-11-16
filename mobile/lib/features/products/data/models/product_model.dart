@@ -14,6 +14,11 @@ class ProductModel {
   final double? weight;
   final String? composition;
   final int? calories;
+  final bool isPreorder;
+  final int leadTimeHours;
+  final int prepaymentPercent;
+  final bool allowInscription;
+  final bool allowReferencePhoto;
 
   const ProductModel({
     required this.id,
@@ -29,6 +34,11 @@ class ProductModel {
     this.weight,
     this.composition,
     this.calories,
+    this.isPreorder = false,
+    this.leadTimeHours = 0,
+    this.prepaymentPercent = 0,
+    this.allowInscription = false,
+    this.allowReferencePhoto = false,
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
@@ -40,12 +50,19 @@ class ProductModel {
       return 0;
     }
 
+    // `price` is the regular price, `discountPrice` the reduced one the
+    // customer actually pays (the server charges discountPrice ?? price)
+    final regular = parsePrice(json['price']);
+    final discounted =
+        json['discountPrice'] == null ? null : parsePrice(json['discountPrice']);
+    final hasDiscount = discounted != null && discounted > 0 && discounted < regular;
+
     return ProductModel(
       id: json['id'] as String,
       name: json['name'] as String? ?? json['nameRu'] as String? ?? '',
       description: json['description'] as String? ?? json['descriptionRu'] as String?,
-      price: parsePrice(json['price']),
-      oldPrice: parsePrice(json['discountPrice']),
+      price: hasDiscount ? discounted : regular,
+      oldPrice: hasDiscount ? regular : null,
       images: (json['images'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
@@ -57,6 +74,11 @@ class ProductModel {
       weight: json['weight'] == null ? null : parsePrice(json['weight']),
       composition: json['ingredients'] as String?,
       calories: (json['calories'] as num?)?.toInt(),
+      isPreorder: json['isPreorder'] as bool? ?? false,
+      leadTimeHours: (json['leadTimeHours'] as num?)?.toInt() ?? 0,
+      prepaymentPercent: (json['prepaymentPercent'] as num?)?.toInt() ?? 0,
+      allowInscription: json['allowInscription'] as bool? ?? false,
+      allowReferencePhoto: json['allowReferencePhoto'] as bool? ?? false,
     );
   }
 
@@ -75,6 +97,11 @@ class ProductModel {
       weight: weight,
       composition: composition,
       calories: calories,
+      isPreorder: isPreorder,
+      leadTimeHours: leadTimeHours,
+      prepaymentPercent: prepaymentPercent,
+      allowInscription: allowInscription,
+      allowReferencePhoto: allowReferencePhoto,
     );
   }
 }

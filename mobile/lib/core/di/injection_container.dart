@@ -57,6 +57,12 @@ import '../../features/addresses/domain/usecases/delete_address.dart';
 import '../../features/addresses/domain/usecases/set_default_address.dart';
 import '../../features/addresses/presentation/bloc/addresses_bloc.dart';
 import '../../features/orders/domain/usecases/create_order.dart';
+import '../../features/orders/domain/usecases/preview_order.dart';
+import '../../features/orders/domain/usecases/get_payment_info.dart';
+import '../../features/orders/domain/usecases/cancel_order.dart';
+import '../../features/orders/domain/usecases/upload_reference_photo.dart';
+import '../../features/cart/domain/entities/cart_item.dart';
+import '../../features/checkout/presentation/bloc/checkout_cubit.dart';
 import '../../features/auth/domain/usecases/update_profile.dart';
 
 final sl = GetIt.instance;
@@ -156,6 +162,22 @@ Future<void> init() async {
   sl.registerLazySingleton(() => GetOrders(sl()));
   sl.registerLazySingleton(() => GetOrderById(sl()));
   sl.registerLazySingleton(() => CreateOrder(sl()));
+  sl.registerLazySingleton(() => PreviewOrder(sl()));
+  sl.registerLazySingleton(() => GetPaymentInfo(sl()));
+  sl.registerLazySingleton(() => CancelOrder(sl()));
+  sl.registerLazySingleton(() => UploadReferencePhoto(sl()));
+
+  // Checkout: created with the cart lines being ordered
+  sl.registerFactoryParam<CheckoutCubit, List<CartItem>, void>(
+    (items, _) => CheckoutCubit(
+      items: items,
+      previewOrder: sl(),
+      createOrder: sl(),
+      getStores: sl(),
+      getAddresses: sl(),
+      getLoyaltyInfo: sl(),
+    ),
+  );
 
   // Orders - BLoC
   sl.registerFactory(

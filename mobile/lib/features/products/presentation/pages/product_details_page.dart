@@ -15,6 +15,7 @@ import '../../../home/presentation/bloc/home_bloc.dart';
 import '../../../home/presentation/bloc/home_state.dart';
 import '../../domain/entities/product.dart';
 import '../widgets/product_card.dart';
+import '../widgets/custom_cake_section.dart';
 import '../bloc/products_bloc.dart';
 import '../bloc/products_event.dart';
 import '../bloc/products_state.dart';
@@ -40,6 +41,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   final ValueNotifier<double> _offset = ValueNotifier(0);
   bool _isFavorite = false;
   int _quantity = 1;
+  final _cakeWishes = CustomCakeWishes();
 
   @override
   void initState() {
@@ -51,6 +53,7 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
   void dispose() {
     _pageController.dispose();
     _offset.dispose();
+    _cakeWishes.dispose();
     super.dispose();
   }
 
@@ -69,10 +72,17 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
         ),
       );
     }
-    for (var i = 0; i < _quantity; i++) {
-      context.read<CartBloc>().add(AddToCart(product));
-    }
+    final inscription = _cakeWishes.inscription.text.trim();
+    final wishes = _cakeWishes.wishes.text.trim();
+    context.read<CartBloc>().add(AddToCart(
+          product,
+          quantity: _quantity,
+          inscription: product.isPreorder && inscription.isNotEmpty ? inscription : null,
+          wishes: product.isPreorder && wishes.isNotEmpty ? wishes : null,
+          referencePhotoUrl: product.isPreorder ? _cakeWishes.photoUrl.value : null,
+        ));
     _showAddedToast(product);
+    _cakeWishes.clear();
     setState(() => _quantity = 1);
   }
 
@@ -487,6 +497,10 @@ class _ProductDetailsPageState extends State<ProductDetailsPage> {
                       height: 1.5,
                     ),
                   ),
+                ],
+                if (product.isPreorder) ...[
+                  const SizedBox(height: 20),
+                  CustomCakeSection(product: product, wishes: _cakeWishes),
                 ],
                 const SizedBox(height: 20),
                 if (hasComposition) ...[

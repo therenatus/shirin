@@ -10,8 +10,9 @@ import '../bloc/cart_event.dart';
 import '../bloc/cart_state.dart';
 import '../widgets/cart_item_card.dart';
 
-/// Cart: lines on content cards, promo code, totals, and one prominent
-/// checkout button floating above the tab bar.
+/// Cart: lines on content cards, the items total, and one prominent
+/// checkout button floating above the tab bar. Delivery, points and the
+/// final total are calculated by the server on the checkout screen.
 class CartPage extends StatefulWidget {
   const CartPage({super.key});
 
@@ -20,17 +21,6 @@ class CartPage extends StatefulWidget {
 }
 
 class _CartPageState extends State<CartPage> {
-  final _promoController = TextEditingController();
-  bool _promoApplied = false;
-
-  static const double _promoDiscount = 50;
-
-  @override
-  void dispose() {
-    _promoController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<CartBloc, CartState>(
@@ -56,8 +46,7 @@ class _CartPageState extends State<CartPage> {
   }
 
   Widget _buildContent(CartLoaded state) {
-    final discount = _promoApplied ? _promoDiscount : 0;
-    final total = (state.totalSum - discount).clamp(0, double.infinity);
+    final hasPreorder = state.items.any((i) => i.product.isPreorder);
 
     return GlassPage(
       title: 'Корзина',
@@ -72,14 +61,10 @@ class _CartPageState extends State<CartPage> {
       ],
       bottomBar: GlassButton(
         label: 'Оформить заказ',
-        trailing: formatPrice(total),
+        trailing: formatPrice(state.totalSum),
         prominent: true,
         expanded: true,
-        onTap: () => showGlassToast(
-          context,
-          'Оформление заказа появится в следующем обновлении',
-          icon: Icons.info_outline_rounded,
-        ),
+        onTap: () => context.push('/checkout'),
       ),
       slivers: [
         SliverPadding(
@@ -92,10 +77,10 @@ class _CartPageState extends State<CartPage> {
               return CartItemCard(
                 item: item,
                 onQuantityChanged: (q) => context.read<CartBloc>().add(
-                      UpdateQuantity(productId: item.product.id, quantity: q),
+                      UpdateQuantity(lineId: item.lineId, quantity: q),
                     ),
                 onRemove: () =>
-                    context.read<CartBloc>().add(RemoveFromCart(item.product.id)),
+                    context.read<CartBloc>().add(RemoveFromCart(item.lineId)),
               );
             },
           ),
@@ -105,28 +90,18 @@ class _CartPageState extends State<CartPage> {
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
             child: Column(
               children: [
-                _PromoField(
-                  controller: _promoController,
-                  applied: _promoApplied,
-                  onApply: () {
-                    if (_promoController.text.trim().isEmpty) return;
-                    setState(() => _promoApplied = true);
-                    FocusScope.of(context).unfocus();
-                  },
-                  onReset: () => setState(() {
-                    _promoApplied = false;
-                    _promoController.clear();
-                  }),
-                ),
-                const SizedBox(height: 16),
                 _SummaryCard(
                   rows: [
                     ('Товары', formatPrice(state.totalSum), null),
-                    ('Доставка', 'Бесплатно', AppColors.success),
-                    if (_promoApplied)
-                      ('Промокод', '-${formatPrice(_promoDiscount)}', AppColors.primary),
+                    (
+                      'Доставка и баллы',
+                      'на следующем шаге',
+                      AppColors.textSecondary,
+                    ),
+                    if (hasPreorder)
+                      ('Торт на заказ', 'нужна дата и предоплата', AppColors.warning),
                   ],
-                  total: formatPrice(total),
+                  total: formatPrice(state.totalSum),
                 ),
               ],
             ),
@@ -201,82 +176,6 @@ class _CartPageState extends State<CartPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PromoField extends StatelessWidget {
-  final TextEditingController controller;
-  final bool applied;
-  final VoidCallback onApply;
-  final VoidCallback onReset;
-
-  const _PromoField({
-    required this.controller,
-    required this.applied,
-    required this.onApply,
-    required this.onReset,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return LiquidGlass.capsule(
-      height: 54,
-      padding: const EdgeInsets.only(left: 18, right: 6),
-      style: applied
-          ? GlassStyle.regular.copyWith(
-              tint: AppColors.primaryTint.withValues(alpha: 0.85),
-              shadowOpacity: 0.06,
-            )
-          : GlassStyle.regular.copyWith(shadowOpacity: 0.06),
-      child: Row(
-        children: [
-          Icon(
-            applied ? Icons.check_circle_rounded : Icons.local_offer_outlined,
-            size: 20,
-            color: applied ? AppColors.primary : AppColors.textSecondary,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              enabled: !applied,
-              textCapitalization: TextCapitalization.characters,
-              style: AppTextStyles.label,
-              cursorColor: AppColors.primary,
-              onSubmitted: (_) => onApply(),
-              decoration: const InputDecoration(
-                hintText: 'Промокод',
-                filled: false,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                disabledBorder: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-                isDense: true,
-              ),
-            ),
-          ),
-          LiquidGlass.capsule(
-            height: 42,
-            shadow: false,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            style: const GlassStyle(
-              blur: 4,
-              tint: Color(0xE6FFFFFF),
-              shadowOpacity: 0,
-            ),
-            onTap: applied ? onReset : onApply,
-            child: Center(
-              widthFactor: 1,
-              child: Text(
-                applied ? 'Убрать' : 'Применить',
-                style: AppTextStyles.label.copyWith(color: AppColors.primary),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

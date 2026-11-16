@@ -15,6 +15,13 @@ class Product extends Equatable {
   final String? composition;
   final int? calories;
 
+  /// Made to order (custom cake): needs a date, may need a prepayment.
+  final bool isPreorder;
+  final int leadTimeHours;
+  final int prepaymentPercent;
+  final bool allowInscription;
+  final bool allowReferencePhoto;
+
   const Product({
     required this.id,
     required this.name,
@@ -29,6 +36,11 @@ class Product extends Equatable {
     this.weight,
     this.composition,
     this.calories,
+    this.isPreorder = false,
+    this.leadTimeHours = 0,
+    this.prepaymentPercent = 0,
+    this.allowInscription = false,
+    this.allowReferencePhoto = false,
   });
 
   bool get hasDiscount => oldPrice != null && oldPrice! > price;
