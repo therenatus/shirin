@@ -58,6 +58,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: development
     container_name: shirin-backend
     environment:
       NODE_ENV: development

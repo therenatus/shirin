@@ -2,6 +2,10 @@
 .env
 .env.local
 .env.*.local
+# Real secrets for any environment; examples stay tracked
+.env.*
+!.env.example
+!.env.*.example
 
 # Dependencies
 node_modules/

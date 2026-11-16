@@ -8,6 +8,15 @@ import { ConfigService } from '@nestjs/config';
 import * as Minio from 'minio';
 import { randomUUID } from 'crypto';
 
+/** Where admins may upload images. */
+const ADMIN_FOLDERS = [
+  'products',
+  'categories',
+  'promotions',
+  'stores',
+  'uploads',
+];
+
 /** Image types customers may upload, detected from the file's first bytes. */
 const IMAGE_SIGNATURES: {
   ext: string;
@@ -81,18 +90,32 @@ export class StorageService implements OnModuleInit {
     }
   }
 
+  /**
+   * Admin upload. The folder must be one of ADMIN_FOLDERS and the object
+   * name is generated here: client-supplied paths or names are never used,
+   * and the type comes from the file content.
+   */
   async uploadFile(
     file: Express.Multer.File,
     folder: string = 'uploads',
   ): Promise<string> {
-    const fileName = `${folder}/${Date.now()}-${file.originalname.replace(/\s+/g, '-')}`;
+    if (!ADMIN_FOLDERS.includes(folder)) {
+      throw new BadRequestException(
+        `Folder must be one of: ${ADMIN_FOLDERS.join(', ')}`,
+      );
+    }
+    const type = IMAGE_SIGNATURES.find((t) => t.test(file.buffer));
+    if (!type) {
+      throw new BadRequestException('Only JPEG, PNG or WebP images');
+    }
+    const fileName = `${folder}/${randomUUID()}.${type.ext}`;
 
     await this.client.putObject(
       this.bucketName,
       fileName,
       file.buffer,
       file.size,
-      { 'Content-Type': file.mimetype },
+      { 'Content-Type': type.mime },
     );
 
     return `${this.publicUrl}/${this.bucketName}/${fileName}`;

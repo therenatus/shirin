@@ -1,0 +1,116 @@
+# Production stack. Usage:
+#   cp .env.production.example .env.production   # fill in real values
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Only the API (3000), the dashboard (3001) and file storage (8333) listen,
+# and only on 127.0.0.1: put a reverse proxy with HTTPS (nginx, Caddy) in
+# front of them. PostgreSQL and Redis are reachable only inside the network.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shirin_db
+      POSTGRES_USER: shirin_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: [shirin]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shirin_user -d shirin_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks: [shirin]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.53
+    restart: unless-stopped
+    entrypoint: ["/infra/entrypoint.sh"]
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY is required}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY is required}
+      S3_BUCKET: shirin
+    ports:
+      - "127.0.0.1:8333:8333"
+    volumes:
+      - seaweedfs_data:/data
+      - ./infra/seaweedfs/entrypoint.sh:/infra/entrypoint.sh:ro
+    networks: [shirin]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: ./backend
+      target: production
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgresql://shirin_user:${DB_PASSWORD}@postgres:5432/shirin_db
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 30d
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      SMS_PROVIDER: ${SMS_PROVIDER:-nikita}
+      SMS_NIKITA_LOGIN: ${SMS_NIKITA_LOGIN}
+      SMS_NIKITA_PASSWORD: ${SMS_NIKITA_PASSWORD}
+      SMS_NIKITA_SENDER: ${SMS_NIKITA_SENDER}
+      SMS_DAILY_LIMIT: ${SMS_DAILY_LIMIT:-3000}
+      ADMIN_PHONE: ${ADMIN_PHONE}
+      S3_ENDPOINT: seaweedfs
+      S3_PORT: "8333"
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_USE_SSL: "false"
+      S3_BUCKET: shirin
+      S3_PUBLIC_URL: ${S3_PUBLIC_URL:?S3_PUBLIC_URL is required}
+      PRIVACY_CONTACT_EMAIL: ${PRIVACY_CONTACT_EMAIL}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      seaweedfs: { condition: service_healthy }
+    networks: [shirin]
+
+  admin-dashboard:
+    build:
+      context: ./admin-dashboard
+      args:
+        REACT_APP_API_URL: ${ADMIN_API_URL:?ADMIN_API_URL is required}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:80"
+    networks: [shirin]
+
+volumes:
+  postgres_data:
+  redis_data:
+  seaweedfs_data:
+
+networks:
+  shirin:

@@ -1,12 +1,36 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+/**
+ * Browser origins allowed to call the API (the admin dashboard). Mobile apps
+ * do not send Origin, so they are not affected. Unset in development = any.
+ */
+function corsOrigins(): string[] | boolean {
+  const list = (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (list.length > 0) return list;
+  if (isProduction) {
+    throw new Error(
+      'CORS_ORIGINS must list the admin dashboard URL(s) in production',
+    );
+  }
+  return true;
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    cors: true,
+    cors: { origin: corsOrigins(), credentials: false },
   });
+
+  // Security headers; the API serves JSON (and Swagger only outside prod)
+  app.use(helmet({ contentSecurityPolicy: isProduction ? undefined : false }));
 
   // Behind a reverse proxy (nginx, load balancer) the client IP comes from
   // X-Forwarded-For; without this all clients share one rate limit
@@ -16,7 +40,8 @@ async function bootstrap() {
   }
 
   // Global prefix
-  app.setGlobalPrefix('api/v1');
+  // /privacy stays at the root: app stores link to it
+  app.setGlobalPrefix('api/v1', { exclude: ['privacy'] });
 
   // Validation pipe
   app.useGlobalPipes(
@@ -30,7 +55,8 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger documentation
+  // Swagger documentation: off in production unless SWAGGER=true
+  const swaggerEnabled = !isProduction || process.env.SWAGGER === 'true';
   const config = new DocumentBuilder()
     .setTitle('Shirin API')
     .setDescription('API для мобильного приложения кондитерской Ширин')
@@ -43,8 +69,10 @@ async function bootstrap() {
     .addTag('Loyalty', 'Программа лояльности')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  if (swaggerEnabled) {
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   const port = process.env.PORT || 3000;
   await app.listen(port);

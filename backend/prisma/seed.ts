@@ -108,6 +108,28 @@ async function main() {
   });
   console.log('Settings created');
 
+  // Production: no demo data and no admin on a well-known phone number.
+  // The first admin is created from ADMIN_PHONE (logs in by SMS).
+  const isProduction = process.env.NODE_ENV === 'production';
+  if (isProduction && process.env.SEED_DEMO !== 'true') {
+    const adminPhone = process.env.ADMIN_PHONE?.trim();
+    if (adminPhone) {
+      if (!/^\+996\d{9}$/.test(adminPhone)) {
+        throw new Error('ADMIN_PHONE must look like +996XXXXXXXXX');
+      }
+      await prisma.user.upsert({
+        where: { phone: adminPhone },
+        update: { role: 'ADMIN' },
+        create: { phone: adminPhone, role: 'ADMIN' },
+      });
+      console.log('Admin ensured:', adminPhone);
+    } else {
+      console.log('ADMIN_PHONE is not set: no admin created');
+    }
+    console.log('\n✅ Production seed done (settings only)');
+    return;
+  }
+
   // Create admin & test users
   const admin = await prisma.user.upsert({
     where: { phone: '+996700000000' },

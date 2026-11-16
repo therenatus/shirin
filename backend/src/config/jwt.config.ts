@@ -18,8 +18,13 @@ export default registerAs('jwt', () => {
     if (!value) {
       throw new Error(`${name} is not set`);
     }
-    if (process.env.NODE_ENV === 'production' && INSECURE_SECRETS.has(value)) {
-      throw new Error(`${name} uses a default value; set a real secret`);
+    if (process.env.NODE_ENV === 'production') {
+      if (INSECURE_SECRETS.has(value)) {
+        throw new Error(`${name} uses a default value; set a real secret`);
+      }
+      if (value.length < 32) {
+        throw new Error(`${name} must be at least 32 characters in production`);
+      }
     }
   }
 

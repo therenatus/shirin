@@ -8,12 +8,14 @@ import {
   Param,
   ParseUUIDPipe,
   Query,
+  Delete,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import type { AuthUser } from '../auth/types/auth-user';
 import { QueryStaffDto, UpdateUserRoleDto } from './dto/staff.dto';
+import { FcmTokenDto } from './dto/fcm-token.dto';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -28,26 +30,34 @@ export class UsersController {
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user' })
-  getMe(@CurrentUser() user: any) {
+  getMe(@CurrentUser() user: AuthUser) {
     return this.usersService.findById(user.id);
   }
 
   @Patch('me')
   @ApiOperation({ summary: 'Update profile' })
-  updateProfile(@CurrentUser() user: any, @Body() dto: UpdateUserDto) {
+  updateProfile(@CurrentUser() user: AuthUser, @Body() dto: UpdateUserDto) {
     return this.usersService.updateProfile(user.id, dto);
+  }
+
+  @Delete('me')
+  @ApiOperation({
+    summary: 'Delete my account (personal data erased, orders anonymised)',
+  })
+  deleteMe(@CurrentUser() user: AuthUser) {
+    return this.usersService.deleteAccount(user.id);
   }
 
   @Get('me/qr-code')
   @ApiOperation({ summary: 'Get QR code' })
-  getQRCode(@CurrentUser() user: any) {
+  getQRCode(@CurrentUser() user: AuthUser) {
     return this.usersService.getQRCode(user.id);
   }
 
   @Post('me/fcm-token')
   @ApiOperation({ summary: 'Save FCM token' })
-  updateFCMToken(@CurrentUser() user: any, @Body('token') token: string) {
-    return this.usersService.updateFCMToken(user.id, token);
+  updateFCMToken(@CurrentUser() user: AuthUser, @Body() dto: FcmTokenDto) {
+    return this.usersService.updateFCMToken(user.id, dto.token);
   }
 
   // ==================== STAFF (ADMIN) ====================
